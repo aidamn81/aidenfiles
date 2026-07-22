@@ -49,7 +49,12 @@
       if (fileType.startsWith('video/')) return 'Video';
       if (fileType.startsWith('audio/')) return 'Audio';
       const ext = name.split('.').pop().toLowerCase();
-      if (['pdf', 'doc', 'docx', 'txt', 'md'].includes(ext)) return 'Document';
+      if (['pdf'].includes(ext)) return 'PDF';
+      if (['doc', 'docx'].includes(ext)) return 'Word Doc';
+      if (['xls', 'xlsx'].includes(ext)) return 'Spreadsheet';
+      if (['ppt', 'pptx'].includes(ext)) return 'Presentation';
+      if (['txt', 'md'].includes(ext)) return 'Text';
+      if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'Archive';
       return 'File';
     }
 
@@ -462,7 +467,12 @@
       if (kind === 'Image') return 'image';
       if (kind === 'Video') return 'film';
       if (kind === 'Audio') return 'music';
-      return 'file-text';
+      if (kind === 'PDF') return 'file-text';
+      if (kind === 'Word Doc') return 'file-type-2';
+      if (kind === 'Spreadsheet') return 'table';
+      if (kind === 'Presentation') return 'presentation';
+      if (kind === 'Archive') return 'archive';
+      return 'file';
     }
 
     function ItemCard({ item, onOpen, onMenu, onShare, dragHandleProps }) {
@@ -737,6 +747,9 @@
       const openItem = (item) => {
         if (isFolder(item)) {
           store.setCurrentFolderId(item.id);
+        } else {
+          const fileUrl = URL.createObjectURL(item.blob);
+          window.open(fileUrl, '_blank');
         }
       };
 
@@ -758,6 +771,7 @@
 
       return (
         <div className="min-h-screen bg-black text-white flex flex-col">
+          {/* Unrestricted File Picker (Enables picking any file format from iOS Files / iCloud / Photos) */}
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
           <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelected} />
           <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverSelected} />
