@@ -2,7 +2,7 @@
 <html lang="en" class="bg-black text-white select-none">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Aiden Files</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -23,6 +23,11 @@
       background-image: 
         linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
         linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    }
+
+    /* Prevent mobile browser gestures during edit drag */
+    .touch-none {
+      touch-action: none;
     }
   </style>
 </head>
@@ -234,8 +239,8 @@
 
       const createFolder = useCallback(async (name, parentId) => {
         const siblings = folders.filter((f) => f.parentId === parentId);
-        const col = siblings.length % 4;
-        const row = Math.floor(siblings.length / 4);
+        const col = siblings.length % 2;
+        const row = Math.floor(siblings.length / 2);
         const folder = {
           id: uid(),
           name,
@@ -243,8 +248,8 @@
           coverImage: null,
           position: siblings.length,
           viewMode: 'grid',
-          x: 20 + col * 170,
-          y: 20 + row * 170,
+          x: 16 + col * 150,
+          y: 16 + row * 150,
         };
         setFolders((prev) => [...prev, folder]);
         enqueueSave(() => db.putFolder(folder));
@@ -253,8 +258,8 @@
 
       const addFile = useCallback(async (file, parentId) => {
         const siblings = files.filter((f) => f.parentId === parentId);
-        const col = (siblings.length + 2) % 6;
-        const row = Math.floor((siblings.length + 2) / 6);
+        const col = siblings.length % 3;
+        const row = Math.floor(siblings.length / 3);
         const item = {
           id: uid(),
           name: file.name,
@@ -264,8 +269,8 @@
           blob: file,
           parentId,
           position: siblings.length,
-          x: 20 + col * 110,
-          y: 20 + row * 110,
+          x: 16 + col * 110,
+          y: 16 + row * 120,
         };
         setFiles((prev) => [...prev, item]);
         enqueueSave(() => db.putFile(item));
@@ -457,11 +462,11 @@
       return (
         <button
           onClick={onClick}
-          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+          className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors active:bg-zinc-800 ${
             danger ? 'text-red-400 hover:bg-red-500/10' : 'text-zinc-200 hover:bg-zinc-800'
           }`}
         >
-          <Icon name={icon} size={16} />
+          <Icon name={icon} size={18} />
           {label}
         </button>
       );
@@ -501,11 +506,10 @@
       const isDraggingRef = useRef(false);
       const dragStartRef = useRef({ x: 0, y: 0, itemX: 0, itemY: 0 });
       
-      // Default initial layout positions if x,y not set
-      const col = defaultIndex % 6;
-      const row = Math.floor(defaultIndex / 6);
-      const posX = item.x !== undefined ? item.x : (folder ? 20 + (col % 3) * 170 : 20 + col * 110);
-      const posY = item.y !== undefined ? item.y : (folder ? 20 + Math.floor(defaultIndex / 3) * 170 : 20 + row * 120);
+      const col = defaultIndex % 3;
+      const row = Math.floor(defaultIndex / 3);
+      const posX = item.x !== undefined ? item.x : (folder ? 16 + col * 150 : 16 + col * 110);
+      const posY = item.y !== undefined ? item.y : (folder ? 16 + row * 150 : 16 + row * 120);
 
       const [pos, setPos] = useState({ x: posX, y: posY });
 
@@ -517,7 +521,6 @@
 
       const handlePointerDown = (e) => {
         if (!editMode) return;
-        if (e.button !== 0 && e.pointerType === 'mouse') return;
         
         isDraggingRef.current = true;
         dragStartRef.current = {
@@ -531,8 +534,8 @@
           if (!isDraggingRef.current) return;
           const dx = moveEvt.clientX - dragStartRef.current.x;
           const dy = moveEvt.clientY - dragStartRef.current.y;
-          const newX = Math.max(10, dragStartRef.current.itemX + dx);
-          const newY = Math.max(10, dragStartRef.current.itemY + dy);
+          const newX = Math.max(8, dragStartRef.current.itemX + dx);
+          const newY = Math.max(8, dragStartRef.current.itemY + dy);
           setPos({ x: newX, y: newY });
         };
 
@@ -541,8 +544,8 @@
             isDraggingRef.current = false;
             const dx = upEvt.clientX - dragStartRef.current.x;
             const dy = upEvt.clientY - dragStartRef.current.y;
-            const finalX = Math.max(10, dragStartRef.current.itemX + dx);
-            const finalY = Math.max(10, dragStartRef.current.itemY + dy);
+            const finalX = Math.max(8, dragStartRef.current.itemX + dx);
+            const finalY = Math.max(8, dragStartRef.current.itemY + dy);
             onPositionChange(item.id, finalX, finalY);
           }
           window.removeEventListener('pointermove', handlePointerMove);
@@ -553,8 +556,8 @@
         window.addEventListener('pointerup', handlePointerUp);
       };
 
-      const widthClass = folder ? 'w-36 h-36' : 'w-24 h-28';
-      const iconSize = folder ? 36 : 18;
+      const widthClass = folder ? 'w-32 h-32' : 'w-24 h-28';
+      const iconSize = folder ? 32 : 18;
 
       return (
         <div
@@ -564,7 +567,7 @@
             if (!editMode) onOpen();
           }}
           className={`absolute ${widthClass} group bg-zinc-900 border rounded-xl overflow-hidden shadow-lg transition-shadow flex flex-col justify-between ${
-            editMode ? 'cursor-grab active:cursor-grabbing border-yellow-500/60 ring-2 ring-yellow-500/20' : 'cursor-pointer border-zinc-800 hover:border-zinc-600'
+            editMode ? 'touch-none cursor-grab active:cursor-grabbing border-yellow-500/60 ring-2 ring-yellow-500/20' : 'cursor-pointer border-zinc-800 hover:border-zinc-600'
           }`}
         >
           <div className="aspect-square bg-zinc-950 relative overflow-hidden shrink-0">
@@ -599,10 +602,10 @@
           <div className="p-1.5 bg-zinc-900 flex flex-col justify-center min-h-0 flex-1">
             <div className="flex items-center gap-0.5">
               <p className={`flex-1 font-medium text-white truncate ${folder ? 'text-xs' : 'text-[10px]'}`}>{item.name}</p>
-              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onShare(); }} className="p-0.5 text-zinc-400 hover:text-white shrink-0">
+              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onShare(); }} className="p-1 text-zinc-400 hover:text-white shrink-0">
                 <Icon name="share" size={folder ? 14 : 10} />
               </button>
-              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onMenu(e); }} className="p-0.5 text-zinc-400 hover:text-white shrink-0">
+              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onMenu(e); }} className="p-1 text-zinc-400 hover:text-white shrink-0">
                 <Icon name="more-vertical" size={folder ? 14 : 10} />
               </button>
             </div>
@@ -776,7 +779,6 @@
                   {store.currentFolder?.name || 'Aiden Files'}
                 </h1>
 
-                {/* Edit / Lock Mode Toggle Button */}
                 <button
                   onClick={() => setEditMode(!editMode)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
@@ -807,7 +809,6 @@
             </div>
           </header>
 
-          {/* ABSOLUTE CANVAS CONTAINER */}
           <main className={`flex-1 relative w-full h-full overflow-auto ${editMode ? 'edit-grid-bg' : ''}`}>
             {store.children.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center p-6">
@@ -816,7 +817,7 @@
                 <p className="text-zinc-600 text-xs mt-1">Import files or create a folder to get started</p>
               </div>
             ) : (
-              <div className="relative min-w-[2000px] min-h-[2000px] p-4">
+              <div className="relative min-w-[1200px] min-h-[1200px] p-4">
                 {store.children.map((item, index) => (
                   <CanvasItem
                     key={item.id}
