@@ -44,7 +44,7 @@
 
   <!-- Hidden Inputs -->
   <input id="file-input" type="file" multiple class="hidden" />
-  <input id="photo-input" type="file" accept="image/*,video/*" multiple class="hidden" />
+  <input id="photo-input" type="file" accept="image/*,video/*,audio/*" multiple class="hidden" />
   <input id="change-image-input" type="file" accept="image/*" class="hidden" />
   <input id="folder-cover-input" type="file" accept="image/*" class="hidden" />
 
@@ -74,6 +74,28 @@
 
     const uid = () => Math.random().toString(36).substring(2, 9);
     const isFolder = item => !('fileType' in item);
+
+    // --- HELPER FOR MEDIA PLAYBACK (iOS WebKit requires Blob URLs over Data URIs) ---
+    function dataURLtoBlobUrl(dataUrl) {
+      try {
+        if (!dataUrl) return '';
+        if (dataUrl.startsWith('blob:')) return dataUrl;
+        const parts = dataUrl.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'audio/mpeg';
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        const blob = new Blob([u8arr], { type: mime });
+        return URL.createObjectURL(blob);
+      } catch (e) {
+        console.error("Error converting Data URL to Blob URL:", e);
+        return dataUrl;
+      }
+    }
 
     // --- INDEXEDDB ---
     const DB_NAME = 'aiden_files_db';
@@ -191,7 +213,7 @@
         else alert('Sync failed. Please check repository permissions.');
       } catch (err) {
         alert('Sync error: ' + err.message);
-      } finally {
+      } fontally {
         state.isSyncing = false;
         render();
       }
@@ -446,7 +468,7 @@
                 <i data-lucide="file" class="w-4 h-4 text-amber-400"></i> Files App
               </button>
               <button onclick="document.getElementById('photo-input').click(); closeUploadModal();" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2">
-                <i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Photos & Videos
+                <i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Photos, Audio & Videos
               </button>
               <button onclick="openNewFolderModal(); closeUploadModal();" class="w-full py-3 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2 border border-zinc-700/50">
                 <i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i> New Folder
@@ -467,21 +489,23 @@
       }
       
       if (type.startsWith('video/')) {
+        const videoBlobUrl = dataURLtoBlobUrl(file.dataUrl);
         return `
-          <video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black" src="${file.dataUrl}">
+          <video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black" src="${videoBlobUrl}">
             Your browser does not support playing this video.
           </video>
         `;
       }
 
       if (type.startsWith('audio/')) {
+        const audioBlobUrl = dataURLtoBlobUrl(file.dataUrl);
         return `
           <div class="flex flex-col items-center gap-6 p-8 bg-zinc-900 border border-zinc-800 rounded-3xl max-w-sm w-full shadow-2xl text-center">
             <div class="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-400">
               <i data-lucide="music" class="w-10 h-10"></i>
             </div>
             <span class="text-sm font-semibold text-zinc-200 max-w-full truncate">${file.name}</span>
-            <audio controls class="w-full" src="${file.dataUrl}">
+            <audio controls playsinline autoplay class="w-full" src="${audioBlobUrl}">
               Your browser does not support audio playback.
             </audio>
           </div>
@@ -667,7 +691,6 @@
 
       if (navigator.canShare && file.dataUrl) {
         try {
-          // Convert Data URL to File Object for Native iOS Share Sheet
           const res = await fetch(file.dataUrl);
           const blob = await res.blob();
           const nativeFile = new File([blob], file.name, { type: file.fileType || blob.type });
@@ -684,7 +707,6 @@
         }
       }
 
-      // Fallback for URLs or devices that don't support file sharing
       if (navigator.share) {
         try {
           await navigator.share({ title: file.name, text: file.name, url: file.dataUrl });
@@ -818,7 +840,7 @@
     }
 
     function getMimeType(file) {
-      if (file.type) return file.type;
+      if (file.type && file.type !== '') return file.type;
       const ext = file.name.split('.').pop().toLowerCase();
       const mimeMap = {
         'mp3': 'audio/mpeg',
