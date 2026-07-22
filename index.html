@@ -448,7 +448,7 @@
       );
     }
 
-    function FileImagePreview({ file, iconSize = 24 }) {
+    function FileImagePreview({ file, iconSize = 18 }) {
       const [src, setSrc] = useState(null);
       useEffect(() => {
         if (!file.blob) return;
@@ -478,7 +478,7 @@
     function ItemCard({ item, onOpen, onMenu, onShare, dragHandleProps }) {
       const folder = isFolder(item) ? item : null;
       const file = !isFolder(item) ? item : null;
-      const iconSize = folder ? 36 : 24;
+      const iconSize = folder ? 36 : 18;
 
       return (
         <div
@@ -506,23 +506,23 @@
               </div>
             )}
             {file && (
-              <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-sm text-white text-[8px] font-medium px-1.5 py-0.2 rounded-full truncate max-w-[80%]">
+              <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-sm text-white text-[7px] font-medium px-1 py-0.1 rounded truncate max-w-[85%]">
                 {getFileKind(file.fileType, file.name)}
               </div>
             )}
           </div>
 
-          <div className="px-2 py-1.5">
+          <div className="p-1.5">
             <div className="flex items-center gap-0.5">
-              <p className={`flex-1 font-medium text-white truncate ${folder ? 'text-sm' : 'text-xs'}`}>{item.name}</p>
-              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onShare(); }} className="p-1 -mr-1 text-zinc-400 hover:text-white shrink-0">
-                <Icon name="share" size={folder ? 15 : 13} />
+              <p className={`flex-1 font-medium text-white truncate ${folder ? 'text-sm' : 'text-[11px]'}`}>{item.name}</p>
+              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onShare(); }} className="p-0.5 text-zinc-400 hover:text-white shrink-0">
+                <Icon name="share" size={folder ? 15 : 11} />
               </button>
-              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onMenu(e); }} className="p-1 text-zinc-400 hover:text-white shrink-0">
-                <Icon name="more-vertical" size={folder ? 15 : 13} />
+              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onMenu(e); }} className="p-0.5 text-zinc-400 hover:text-white shrink-0">
+                <Icon name="more-vertical" size={folder ? 15 : 11} />
               </button>
             </div>
-            <p className="text-[10px] text-zinc-500 mt-0.5 truncate">
+            <p className="text-[9px] text-zinc-500 mt-0.5 truncate">
               {folder ? formatDate(Date.now()) : `${formatBytes(file.size)}`}
             </p>
           </div>
@@ -837,14 +837,14 @@
                 <p className="text-zinc-600 text-xs mt-1">Import files or create a folder to get started</p>
               </div>
             ) : store.currentViewMode === 'grid' ? (
-              /* Grid columns: Files take 2 grid units, Folders take 3 grid units (50% larger) */
+              /* Grid columns: Files span 1 unit, Folders span 3 units */
               <div className="grid grid-cols-6 sm:grid-cols-12 md:grid-cols-12 lg:grid-cols-24 gap-2 items-start">
                 {store.children.map((item) => {
                   const fold = isFolder(item);
                   return (
                     <div 
                       key={item.id} 
-                      className={`${fold ? 'col-span-3' : 'col-span-2'} ${dragOverId === item.id ? 'ring-2 ring-blue-500 rounded-xl' : ''}`}
+                      className={`${fold ? 'col-span-3' : 'col-span-1'} ${dragOverId === item.id ? 'ring-2 ring-blue-500 rounded-xl' : ''}`}
                     >
                       <ItemCard
                         item={item}
