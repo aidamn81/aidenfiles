@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="bg-black text-white">
+<html lang="en" class="bg-black text-white select-none">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,12 +14,19 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    /* Hide scrollbars for clean UI */
+    /* Custom scrollbars and canvas styling */
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    .edit-grid-bg {
+      background-size: 24px 24px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    }
   </style>
 </head>
-<body class="bg-black min-h-screen text-zinc-100 selection:bg-zinc-800">
+<body class="bg-black min-h-screen text-zinc-100 selection:bg-zinc-800 overflow-hidden">
   <div id="root"></div>
 
   <script type="text/babel">
@@ -89,7 +96,7 @@
 
     // --- INDEXEDDB LAYER ---
     const DB_NAME = 'aiden_files_db';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
 
     function openDB() {
       return new Promise((resolve, reject) => {
@@ -215,10 +222,10 @@
       const children = (() => {
         const f = folders
           .filter((x) => x.parentId === currentFolderId && x.id !== 'root')
-          .sort((a, b) => a.position - b.position);
+          .sort((a, b) => (a.position || 0) - (b.position || 0));
         const fl = files
           .filter((x) => x.parentId === currentFolderId)
-          .sort((a, b) => a.position - b.position);
+          .sort((a, b) => (a.position || 0) - (b.position || 0));
         return [...f, ...fl];
       })();
 
@@ -227,6 +234,8 @@
 
       const createFolder = useCallback(async (name, parentId) => {
         const siblings = folders.filter((f) => f.parentId === parentId);
+        const col = siblings.length % 4;
+        const row = Math.floor(siblings.length / 4);
         const folder = {
           id: uid(),
           name,
@@ -234,6 +243,8 @@
           coverImage: null,
           position: siblings.length,
           viewMode: 'grid',
+          x: 20 + col * 170,
+          y: 20 + row * 170,
         };
         setFolders((prev) => [...prev, folder]);
         enqueueSave(() => db.putFolder(folder));
@@ -242,6 +253,8 @@
 
       const addFile = useCallback(async (file, parentId) => {
         const siblings = files.filter((f) => f.parentId === parentId);
+        const col = (siblings.length + 2) % 6;
+        const row = Math.floor((siblings.length + 2) / 6);
         const item = {
           id: uid(),
           name: file.name,
@@ -251,10 +264,34 @@
           blob: file,
           parentId,
           position: siblings.length,
+          x: 20 + col * 110,
+          y: 20 + row * 110,
         };
         setFiles((prev) => [...prev, item]);
         enqueueSave(() => db.putFile(item));
       }, [files]);
+
+      const updateItemPosition = useCallback((id, x, y) => {
+        setFolders((prev) => {
+          const folder = prev.find((f) => f.id === id);
+          if (folder) {
+            const updated = { ...folder, x, y };
+            persistFolder(updated);
+            return prev.map((f) => (f.id === id ? updated : f));
+          }
+          return prev;
+        });
+
+        setFiles((prev) => {
+          const file = prev.find((f) => f.id === id);
+          if (file) {
+            const updated = { ...file, x, y };
+            persistFile(updated);
+            return prev.map((f) => (f.id === id ? updated : f));
+          }
+          return prev;
+        });
+      }, [persistFolder, persistFile]);
 
       const renameFolder = useCallback((id, name) => {
         setFolders((prev) => {
@@ -336,24 +373,6 @@
         enqueueSave(() => db.deleteFile(id));
       }, []);
 
-      const reorderChildren = useCallback((orderedIds) => {
-        const folderMap = new Map(folders.map((f) => [f.id, f]));
-        const fileMap = new Map(files.map((f) => [f.id, f]));
-        orderedIds.forEach((id, idx) => {
-          if (folderMap.has(id)) {
-            const updated = { ...folderMap.get(id), position: idx };
-            folderMap.set(id, updated);
-            persistFolder(updated);
-          } else if (fileMap.has(id)) {
-            const updated = { ...fileMap.get(id), position: idx };
-            fileMap.set(id, updated);
-            persistFile(updated);
-          }
-        });
-        setFolders((prev) => prev.map((f) => folderMap.get(f.id) || f));
-        setFiles((prev) => prev.map((f) => fileMap.get(f.id) || f));
-      }, [folders, files, persistFolder, persistFile]);
-
       return {
         loaded,
         folders,
@@ -366,6 +385,7 @@
         setCurrentFolderId,
         createFolder,
         addFile,
+        updateItemPosition,
         renameFolder,
         renameFile,
         setFolderCover,
@@ -373,7 +393,6 @@
         moveItem,
         deleteFolder,
         deleteFile,
-        reorderChildren,
       };
     }
 
@@ -458,7 +477,7 @@
       }, [file.blob]);
 
       if (!src) return <div className="w-full h-full flex items-center justify-center"><Icon name="image" size={iconSize} className="text-zinc-600" /></div>;
-      return <img src={src} alt={file.name} className="w-full h-full object-cover" />;
+      return <img src={src} alt={file.name} className="w-full h-full object-cover pointer-events-none" />;
     }
 
     function getItemIcon(item) {
@@ -475,22 +494,82 @@
       return 'file';
     }
 
-    function ItemCard({ item, onOpen, onMenu, onShare, dragHandleProps }) {
+    // Canvas Absolute Item Component
+    function CanvasItem({ item, editMode, onOpen, onMenu, onShare, onPositionChange, defaultIndex }) {
       const folder = isFolder(item) ? item : null;
       const file = !isFolder(item) ? item : null;
+      const isDraggingRef = useRef(false);
+      const dragStartRef = useRef({ x: 0, y: 0, itemX: 0, itemY: 0 });
+      
+      // Default initial layout positions if x,y not set
+      const col = defaultIndex % 6;
+      const row = Math.floor(defaultIndex / 6);
+      const posX = item.x !== undefined ? item.x : (folder ? 20 + (col % 3) * 170 : 20 + col * 110);
+      const posY = item.y !== undefined ? item.y : (folder ? 20 + Math.floor(defaultIndex / 3) * 170 : 20 + row * 120);
+
+      const [pos, setPos] = useState({ x: posX, y: posY });
+
+      useEffect(() => {
+        if (item.x !== undefined && item.y !== undefined) {
+          setPos({ x: item.x, y: item.y });
+        }
+      }, [item.x, item.y]);
+
+      const handlePointerDown = (e) => {
+        if (!editMode) return;
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
+        
+        isDraggingRef.current = true;
+        dragStartRef.current = {
+          x: e.clientX,
+          y: e.clientY,
+          itemX: pos.x,
+          itemY: pos.y,
+        };
+
+        const handlePointerMove = (moveEvt) => {
+          if (!isDraggingRef.current) return;
+          const dx = moveEvt.clientX - dragStartRef.current.x;
+          const dy = moveEvt.clientY - dragStartRef.current.y;
+          const newX = Math.max(10, dragStartRef.current.itemX + dx);
+          const newY = Math.max(10, dragStartRef.current.itemY + dy);
+          setPos({ x: newX, y: newY });
+        };
+
+        const handlePointerUp = (upEvt) => {
+          if (isDraggingRef.current) {
+            isDraggingRef.current = false;
+            const dx = upEvt.clientX - dragStartRef.current.x;
+            const dy = upEvt.clientY - dragStartRef.current.y;
+            const finalX = Math.max(10, dragStartRef.current.itemX + dx);
+            const finalY = Math.max(10, dragStartRef.current.itemY + dy);
+            onPositionChange(item.id, finalX, finalY);
+          }
+          window.removeEventListener('pointermove', handlePointerMove);
+          window.removeEventListener('pointerup', handlePointerUp);
+        };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+      };
+
+      const widthClass = folder ? 'w-36 h-36' : 'w-24 h-28';
       const iconSize = folder ? 36 : 18;
 
       return (
         <div
-          {...(dragHandleProps || {})}
-          className={`group relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden transition-all h-full flex flex-col justify-between ${
-            dragHandleProps?.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
-          } hover:border-zinc-600`}
-          onClick={onOpen}
+          style={{ left: pos.x, top: pos.y }}
+          onPointerDown={handlePointerDown}
+          onClick={(e) => {
+            if (!editMode) onOpen();
+          }}
+          className={`absolute ${widthClass} group bg-zinc-900 border rounded-xl overflow-hidden shadow-lg transition-shadow flex flex-col justify-between ${
+            editMode ? 'cursor-grab active:cursor-grabbing border-yellow-500/60 ring-2 ring-yellow-500/20' : 'cursor-pointer border-zinc-800 hover:border-zinc-600'
+          }`}
         >
-          <div className="aspect-square bg-zinc-950 relative overflow-hidden">
+          <div className="aspect-square bg-zinc-950 relative overflow-hidden shrink-0">
             {folder?.coverImage ? (
-              <img src={folder.coverImage} alt={folder.name} className="w-full h-full object-cover" />
+              <img src={folder.coverImage} alt={folder.name} className="w-full h-full object-cover pointer-events-none" />
             ) : file?.fileType.startsWith('image/') ? (
               <FileImagePreview file={file} iconSize={iconSize} />
             ) : (
@@ -498,88 +577,39 @@
                 <Icon name={getItemIcon(item)} size={iconSize} className="text-zinc-600" />
               </div>
             )}
-            {folder && <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />}
+            {folder && <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />}
             {folder && (
-              <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 text-white/90">
-                <Icon name="folder" size={13} />
-                <span className="text-xs font-medium">Folder</span>
+              <div className="absolute bottom-1 left-1.5 flex items-center gap-1 text-white/90">
+                <Icon name="folder" size={12} />
+                <span className="text-[10px] font-medium">Folder</span>
               </div>
             )}
             {file && (
-              <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-sm text-white text-[7px] font-medium px-1 py-0.1 rounded truncate max-w-[85%]">
+              <div className="absolute top-1 right-1 bg-black/70 backdrop-blur-sm text-white text-[7px] font-medium px-1 py-0.2 rounded truncate max-w-[85%]">
                 {getFileKind(file.fileType, file.name)}
+              </div>
+            )}
+            {editMode && (
+              <div className="absolute top-1 left-1 bg-yellow-500 text-black rounded p-0.5 shadow">
+                <Icon name="move" size={10} />
               </div>
             )}
           </div>
 
-          <div className="p-1.5">
+          <div className="p-1.5 bg-zinc-900 flex flex-col justify-center min-h-0 flex-1">
             <div className="flex items-center gap-0.5">
-              <p className={`flex-1 font-medium text-white truncate ${folder ? 'text-sm' : 'text-[11px]'}`}>{item.name}</p>
+              <p className={`flex-1 font-medium text-white truncate ${folder ? 'text-xs' : 'text-[10px]'}`}>{item.name}</p>
               <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onShare(); }} className="p-0.5 text-zinc-400 hover:text-white shrink-0">
-                <Icon name="share" size={folder ? 15 : 11} />
+                <Icon name="share" size={folder ? 14 : 10} />
               </button>
               <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onMenu(e); }} className="p-0.5 text-zinc-400 hover:text-white shrink-0">
-                <Icon name="more-vertical" size={folder ? 15 : 11} />
+                <Icon name="more-vertical" size={folder ? 14 : 10} />
               </button>
             </div>
-            <p className="text-[9px] text-zinc-500 mt-0.5 truncate">
+            <p className="text-[8px] text-zinc-500 truncate">
               {folder ? formatDate(Date.now()) : `${formatBytes(file.size)}`}
             </p>
           </div>
-
-          {dragHandleProps?.draggable && (
-            <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Icon name="grip-vertical" size={12} className="text-white/50" />
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    function ItemRow({ item, onOpen, onMenu, onShare, onMoveUp, onMoveDown, canMoveUp, canMoveDown, dragHandleProps }) {
-      const folder = isFolder(item) ? item : null;
-      const file = !isFolder(item) ? item : null;
-
-      return (
-        <div
-          {...(dragHandleProps || {})}
-          className={`group flex items-center gap-3 px-3 py-2 border-b border-zinc-800/50 transition-colors ${
-            dragHandleProps?.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
-          } hover:bg-zinc-800/50`}
-          onClick={onOpen}
-        >
-          <div className="w-8 h-8 rounded-lg bg-zinc-950 border border-zinc-800 overflow-hidden shrink-0 flex items-center justify-center">
-            {folder?.coverImage ? (
-              <img src={folder.coverImage} alt="" className="w-full h-full object-cover" />
-            ) : file?.fileType.startsWith('image/') ? (
-              <FileImagePreview file={file} />
-            ) : (
-              <Icon name={getItemIcon(item)} size={16} className="text-zinc-500" />
-            )}
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{item.name}</p>
-            <p className="text-xs text-zinc-500 truncate">
-              {folder ? 'Folder' : `${getFileKind(file.fileType, file.name)} · ${formatBytes(file.size)}`}
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-0.5 shrink-0">
-            <button onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }} disabled={!canMoveUp} className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-30">
-              <Icon name="chevron-up" size={12} />
-            </button>
-            <button onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }} disabled={!canMoveDown} className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-30">
-              <Icon name="chevron-down" size={12} />
-            </button>
-          </div>
-
-          <button onClick={(e) => { e.stopPropagation(); onShare(); }} className="p-1.5 text-zinc-400 hover:text-white shrink-0">
-            <Icon name="share" size={15} />
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); onMenu(e); }} className="p-1.5 -mr-1 text-zinc-400 hover:text-white shrink-0">
-            <Icon name="more-vertical" size={15} />
-          </button>
         </div>
       );
     }
@@ -587,6 +617,7 @@
     // --- MAIN APP ---
     function App() {
       const store = useFileStore();
+      const [editMode, setEditMode] = useState(false);
       const [menuTarget, setMenuTarget] = useState(null);
       const [confirmTarget, setConfirmTarget] = useState(null);
       const [renameTarget, setRenameTarget] = useState(null);
@@ -600,9 +631,6 @@
       const fileInputRef = useRef(null);
       const photoInputRef = useRef(null);
       const coverInputRef = useRef(null);
-
-      const dragId = useRef(null);
-      const [dragOverId, setDragOverId] = useState(null);
 
       if (!store.loaded) {
         return (
@@ -694,57 +722,6 @@
         setConfirmTarget(null);
       };
 
-      const handleDragStart = (id) => (e) => {
-        dragId.current = id;
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', id);
-      };
-
-      const handleDragOver = (id) => (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        if (dragId.current && dragId.current !== id) setDragOverId(id);
-      };
-
-      const handleDrop = (id) => (e) => {
-        e.preventDefault();
-        const draggedId = dragId.current;
-        if (!draggedId || draggedId === id) return;
-        const ids = store.children.map((c) => c.id);
-        const fromIdx = ids.indexOf(draggedId);
-        const toIdx = ids.indexOf(id);
-        if (fromIdx === -1 || toIdx === -1) return;
-        ids.splice(fromIdx, 1);
-        ids.splice(toIdx, 0, draggedId);
-        store.reorderChildren(ids);
-        dragId.current = null;
-        setDragOverId(null);
-      };
-
-      const handleDragEnd = () => {
-        dragId.current = null;
-        setDragOverId(null);
-      };
-
-      const moveByArrow = (id, direction) => {
-        const ids = store.children.map((c) => c.id);
-        const idx = ids.indexOf(id);
-        if (idx === -1) return;
-        const newIdx = direction === 'up' ? idx - 1 : idx + 1;
-        if (newIdx < 0 || newIdx >= ids.length) return;
-        ids.splice(idx, 1);
-        ids.splice(newIdx, 0, id);
-        store.reorderChildren(ids);
-      };
-
-      const dragProps = (id) => ({
-        draggable: true,
-        onDragStart: handleDragStart(id),
-        onDragEnd: handleDragEnd,
-        onDragOver: handleDragOver(id),
-        onDrop: handleDrop(id),
-      });
-
       const openItem = (item) => {
         if (isFolder(item)) {
           store.setCurrentFolderId(item.id);
@@ -760,23 +737,17 @@
         setMenuTarget({ item, x: e.clientX, y: e.clientY });
       };
 
-      const toggleViewMode = () => {
-        if (store.currentFolderId === null) return;
-        const newMode = store.currentViewMode === 'grid' ? 'list' : 'grid';
-        store.setFolderViewMode(store.currentFolderId, newMode);
-      };
-
       const moveFolderOptions = store.folders.filter(
         (f) => f.id !== moveTarget?.id && f.parentId !== moveTarget?.id
       );
 
       return (
-        <div className="min-h-screen bg-black text-white flex flex-col">
+        <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
           <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelected} />
           <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverSelected} />
 
-          <header className="sticky top-0 z-30 bg-black/90 backdrop-blur-lg border-b border-zinc-900">
+          <header className="shrink-0 z-30 bg-black/95 backdrop-blur-lg border-b border-zinc-900">
             <div className="px-4 pt-3 pb-2">
               <div className="flex items-center gap-1 text-sm overflow-x-auto no-scrollbar mb-2">
                 <button onClick={() => store.setCurrentFolderId(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white shrink-0">
@@ -804,13 +775,20 @@
                 <h1 className="flex-1 text-lg font-bold text-white truncate">
                   {store.currentFolder?.name || 'Aiden Files'}
                 </h1>
+
+                {/* Edit / Lock Mode Toggle Button */}
                 <button
-                  onClick={toggleViewMode}
-                  disabled={store.currentFolderId === null}
-                  className="p-2 text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 rounded-lg disabled:opacity-40 transition-colors"
+                  onClick={() => setEditMode(!editMode)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    editMode 
+                      ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' 
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                  }`}
                 >
-                  <Icon name={store.currentViewMode === 'grid' ? 'list' : 'grid-3x3'} size={18} />
+                  <Icon name={editMode ? "unlock" : "lock"} size={14} />
+                  <span>{editMode ? 'Edit Mode' : 'Locked'}</span>
                 </button>
+
                 <button onClick={() => setNewFolderOpen(true)} className="p-2 text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 rounded-lg transition-colors">
                   <Icon name="plus" size={18} />
                 </button>
@@ -818,61 +796,38 @@
             </div>
 
             <div className="px-4 pb-3 flex gap-2">
-              <button onClick={handleImportFile} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-200 hover:bg-zinc-800 transition-colors">
-                <Icon name="file-up" size={16} />
+              <button onClick={handleImportFile} className="flex-1 flex items-center justify-center gap-2 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition-colors">
+                <Icon name="file-up" size={15} />
                 Import File
               </button>
-              <button onClick={handleImportPhoto} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-200 hover:bg-zinc-800 transition-colors">
-                <Icon name="image-plus" size={16} />
+              <button onClick={handleImportPhoto} className="flex-1 flex items-center justify-center gap-2 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs font-medium text-zinc-200 hover:bg-zinc-800 transition-colors">
+                <Icon name="image-plus" size={15} />
                 Import Photo
               </button>
             </div>
           </header>
 
-          <main className="flex-1 px-4 py-4 pb-24">
+          {/* ABSOLUTE CANVAS CONTAINER */}
+          <main className={`flex-1 relative w-full h-full overflow-auto ${editMode ? 'edit-grid-bg' : ''}`}>
             {store.children.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="flex flex-col items-center justify-center h-full text-center p-6">
                 <Icon name="folder" size={48} className="text-zinc-700 mb-3" />
                 <p className="text-zinc-500 text-sm">This folder is empty</p>
                 <p className="text-zinc-600 text-xs mt-1">Import files or create a folder to get started</p>
               </div>
-            ) : store.currentViewMode === 'grid' ? (
-              /* Grid columns: Files span 1 unit, Folders span 3 units */
-              <div className="grid grid-cols-6 sm:grid-cols-12 md:grid-cols-12 lg:grid-cols-24 gap-2 items-start">
-                {store.children.map((item) => {
-                  const fold = isFolder(item);
-                  return (
-                    <div 
-                      key={item.id} 
-                      className={`${fold ? 'col-span-3' : 'col-span-1'} ${dragOverId === item.id ? 'ring-2 ring-blue-500 rounded-xl' : ''}`}
-                    >
-                      <ItemCard
-                        item={item}
-                        onOpen={() => openItem(item)}
-                        onMenu={openMenu(item)}
-                        onShare={() => handleShare(item)}
-                        dragHandleProps={dragProps(item.id)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
             ) : (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-                {store.children.map((item, idx) => (
-                  <div key={item.id} className={dragOverId === item.id ? 'ring-2 ring-blue-500' : ''}>
-                    <ItemRow
-                      item={item}
-                      onOpen={() => openItem(item)}
-                      onMenu={openMenu(item)}
-                      onShare={() => handleShare(item)}
-                      onMoveUp={() => moveByArrow(item.id, 'up')}
-                      onMoveDown={() => moveByArrow(item.id, 'down')}
-                      canMoveUp={idx > 0}
-                      canMoveDown={idx < store.children.length - 1}
-                      dragHandleProps={dragProps(item.id)}
-                    />
-                  </div>
+              <div className="relative min-w-[2000px] min-h-[2000px] p-4">
+                {store.children.map((item, index) => (
+                  <CanvasItem
+                    key={item.id}
+                    item={item}
+                    editMode={editMode}
+                    defaultIndex={index}
+                    onOpen={() => openItem(item)}
+                    onMenu={openMenu(item)}
+                    onShare={() => handleShare(item)}
+                    onPositionChange={store.updateItemPosition}
+                  />
                 ))}
               </div>
             )}
@@ -915,10 +870,10 @@
                 }}
               />
               <MenuItem
-                icon={store.currentViewMode === 'grid' ? 'list' : 'grid-3x3'}
-                label={store.currentViewMode === 'grid' ? 'Switch to List View' : 'Switch to Grid View'}
+                icon={editMode ? "lock" : "unlock"}
+                label={editMode ? "Lock Layout" : "Edit Positions"}
                 onClick={() => {
-                  toggleViewMode();
+                  setEditMode(!editMode);
                   setMenuTarget(null);
                 }}
               />
