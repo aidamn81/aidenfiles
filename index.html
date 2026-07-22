@@ -298,8 +298,8 @@
     function renderItem(item, index) {
       const col = index % 4;
       const row = Math.floor(index / 4);
-      const posX = item.x !== undefined ? item.x : (20 + col * 130);
-      const posY = item.y !== undefined ? item.y : (20 + row * 150);
+      const posX = item.x !== undefined ? item.x : (20 + col * 140);
+      const posY = item.y !== undefined ? item.y : (20 + row * 160);
       const itemWidth = item.width || (isFolder(item) ? 96 : 112);
       const itemHeight = item.height || (isFolder(item) ? 96 : 128);
       const folder = isFolder(item);
@@ -571,6 +571,8 @@
         let file = state.files.find(f => f.id === id);
         if (file) {
           const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
+          delete newFile.x;
+          delete newFile.y;
           state.files.push(newFile);
           await saveFile(newFile);
         }
@@ -583,6 +585,8 @@
       let file = state.files.find(f => f.id === id);
       if (file) {
         const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
+        delete newFile.x;
+        delete newFile.y;
         state.files.push(newFile);
         await saveFile(newFile);
         alert('File copied successfully!');
@@ -663,6 +667,8 @@
         const item = isFolderItem ? state.folders.find(f => f.id === id) : state.files.find(f => f.id === id);
         if (item) {
           item.parentId = actualParent;
+          delete item.x;
+          delete item.y;
           if (isFolderItem) await saveFolder(item); else await saveFile(item);
           closeMenu();
           render();
@@ -697,7 +703,7 @@
     function openNewFolderModal() {
       const name = prompt('Folder Name:', 'New Folder');
       if (name) {
-        const folder = { id: uid(), name, parentId: state.currentFolderId, x: 20, y: 20, width: 96, height: 96 };
+        const folder = { id: uid(), name, parentId: state.currentFolderId, width: 96, height: 96 };
         state.folders.push(folder);
         saveFolder(folder);
         render();
@@ -729,8 +735,6 @@
           size: file.size,
           dataUrl: dataUrl,
           parentId: state.currentFolderId,
-          x: 20,
-          y: 20,
           width: 112,
           height: 128
         };
