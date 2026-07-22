@@ -151,7 +151,6 @@
       const db = await openDB();
       if (db) {
         const tx = db.transaction('files', 'readwrite');
-        // Do not persist transient blobUrl in IndexedDB
         const fileToSave = { ...file };
         delete fileToSave.blobUrl;
         tx.objectStore('files').put(fileToSave);
@@ -166,13 +165,13 @@
       }
     }
 
-    // --- GITHUB SYNC ---
+    // --- GITHUB SYNC (With auto token prompt & debugging fallback) ---
     async function syncWithGitHub(forcePull = false) {
       if (!state.ghToken) {
-        const token = prompt('Enter your GitHub Personal Access Token:');
+        const token = prompt('Enter your GitHub Personal Access Token (classic token with repo scope or fine-grained token with Contents read/write):');
         if (!token) return;
-        state.ghToken = token;
-        localStorage.setItem('af_gh_token', token);
+        state.ghToken = token.trim();
+        localStorage.setItem('af_gh_token', state.ghToken);
       }
 
       state.isSyncing = true;
@@ -182,11 +181,19 @@
         const url = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/${CONFIG.ghPath}`;
         const headers = {
           'Authorization': `token ${state.ghToken}`,
-          'Accept': 'application/vnd.github.v3+json'
+          'Accept': 'application/vnd.github.v3+json',
+          'X-GitHub-Api-Version': '2022-11-28'
         };
 
         let sha = null;
         const getRes = await fetch(url, { headers });
+        
+        if (getRes.status === 401 || getRes.status === 403) {
+          localStorage.removeItem('af_gh_token');
+          state.ghToken = '';
+          throw new Error('Authentication or Permission denied (401/403). Please check that your Personal Access Token has repo / contents permission and try again.');
+        }
+
         if (getRes.ok) {
           const getJson = await getRes.json();
           sha = getJson.sha;
@@ -219,8 +226,16 @@
         };
 
         const putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
-        if (putRes.ok) alert('Sync Successful! Cloud backup updated.');
-        else alert('Sync failed. Please check repository permissions.');
+        if (putRes.ok) {
+          alert('Sync Successful! Cloud backup updated.');
+        } else {
+          const errData = await putRes.json().catch(() => ({}));
+          if (putRes.status === 403 || putRes.status === 401) {
+            localStorage.removeItem('af_gh_token');
+            state.ghToken = '';
+          }
+          throw new Error(errData.message || `GitHub returned status ${putRes.status}`);
+        }
       } catch (err) {
         alert('Sync error: ' + err.message);
       } finally {
