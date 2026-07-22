@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-black text-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aiden Files</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel for JSX transformation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* Hide scrollbars for clean UI */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-black min-h-screen text-zinc-100 selection:bg-zinc-800">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // --- UTILITIES ---
+    const uid = () => Math.random().toString(36).substring(2, 9);
+    
+    function formatBytes(bytes, decimals = 1) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const dm = decimals < 0 ? 0 : decimals;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    function formatDate(timestamp) {
+      return new Date(timestamp).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+      });
+    }
+
+    function getFileKind(fileType, name) {
+      if (fileType.startsWith('image/')) return 'Image';
+      if (fileType.startsWith('video/')) return 'Video';
+      if (fileType.startsWith('audio/')) return 'Audio';
+      const ext = name.split('.').pop().toLowerCase();
+      if (['pdf', 'doc', 'docx', 'txt', 'md'].includes(ext)) return 'Document';
+      return 'File';
+    }
+
+    function isFolder(item) {
+      return !('fileType' in item);
+    }
+
+    function compressImage(file, maxWidth = 400, quality = 0.8) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let w = img.width;
+            let h = img.height;
+            if (w > maxWidth) {
+              h = Math.round((h * maxWidth) / w);
+              w = maxWidth;
+            }
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // --- INDEXEDDB LAYER ---
+    const DB_NAME = 'aiden_files_db';
+    const DB_VERSION = 1;
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('folders')) db.createObjectStore('folders', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'id' });
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    const db = {
+      async getAllFolders() {
+        const database = await openDB();
+        return new Promise((res) => {
+          const tx = database.transaction('folders', 'readonly');
+          const req = tx.objectStore('folders').getAll();
+          req.onsuccess = () => res(req.result || []);
+        });
+      },
+      async getAllFiles() {
+        const database = await openDB();
+        return new Promise((res) => {
+          const tx = database.transaction('files', 'readonly');
+          const req = tx.objectStore('files').getAll();
+          req.onsuccess = () => res(req.result || []);
+        });
+      },
+      async putFolder(folder) {
+        const database = await openDB();
+        const tx = database.transaction('folders', 'readwrite');
+        tx.objectStore('folders').put(folder);
+      },
+      async putFile(file) {
+        const database = await openDB();
+        const tx = database.transaction('files', 'readwrite');
+        tx.objectStore('files').put(file);
+      },
+      async deleteFolder(id) {
+        const database = await openDB();
+        const tx = database.transaction('folders', 'readwrite');
+        tx.objectStore('folders').delete(id);
+      },
+      async deleteFile(id) {
+        const database = await openDB();
+        const tx = database.transaction('files', 'readwrite');
+        tx.objectStore('files').delete(id);
+      }
+    };
+
+    // --- LUCIDE ICON HELPER ---
+    function Icon({ name, size = 18, className = '' }) {
+      const ref = useRef(null);
+      useEffect(() => {
+        if (ref.current && window.lucide) {
+          ref.current.innerHTML = `<i data-lucide="${name}"></i>`;
+          window.lucide.createIcons({
+            attrs: { width: size, height: size, class: className },
+            nameAttr: 'data-lucide',
+            element: ref.current
+          });
+        }
+      }, [name, size, className]);
+      return <span ref={ref} className="inline-flex items-center justify-center shrink-0" />;
+    }
+
+    // --- STORE HOOK ---
+    function useFileStore() {
+      const [folders, setFolders] = useState([]);
+      const [files, setFiles] = useState([]);
+      const [loaded, setLoaded] = useState(false);
+      const [currentFolderId, setCurrentFolderId] = useState(null);
+      const saveQueue = useRef(Promise.resolve());
+
+      useEffect(() => {
+        (async () => {
+          let f = await db.getAllFolders();
+          let fl = await db.getAllFiles();
+          if (f.length === 0 && fl.length === 0) {
+            const root = {
+              id: 'root',
+              name: 'Aiden Files',
+              parentId: null,
+              coverImage: null,
+              position: 0,
+              viewMode: 'grid',
+            };
+            await db.putFolder(root);
+            f = [root];
+          }
+          setFolders(f);
+          setFiles(fl);
+          setLoaded(true);
+        })();
+      }, []);
+
+      const enqueueSave = (task) => {
+        saveQueue.current = saveQueue.current.then(task).catch(console.error);
+      };
+
+      const persistFolder = useCallback((f) => {
+        enqueueSave(() => db.putFolder(f));
+      }, []);
+      const persistFile = useCallback((f) => {
+        enqueueSave(() => db.putFile(f));
+      }, []);
+
+      const path = (() => {
+        const result = [];
+        let id = currentFolderId;
+        while (id) {
+          const f = folders.find((x) => x.id === id);
+          if (!f) break;
+          result.unshift(f);
+          id = f.parentId;
+        }
+        return result;
+      })();
+
+      const children = (() => {
+        const f = folders
+          .filter((x) => x.parentId === currentFolderId && x.id !== 'root')
+          .sort((a, b) => a.position - b.position);
+        const fl = files
+          .filter((x) => x.parentId === currentFolderId)
+          .sort((a, b) => a.position - b.position);
+        return [...f, ...fl];
+      })();
+
+      const currentFolder = folders.find((f) => f.id === currentFolderId) || null;
+      const currentViewMode = currentFolder?.viewMode || 'grid';
+
+      const createFolder = useCallback(async (name, parentId) => {
+        const siblings = folders.filter((f) => f.parentId === parentId);
+        const folder = {
+          id: uid(),
+          name,
+          parentId,
+          coverImage: null,
+          position: siblings.length,
+          viewMode: 'grid',
+        };
+        setFolders((prev) => [...prev, folder]);
+        enqueueSave(() => db.putFolder(folder));
+        return folder;
+      }, [folders]);
+
+      const addFile = useCallback(async (file, parentId) => {
+        const siblings = files.filter((f) => f.parentId === parentId);
+        const item = {
+          id: uid(),
+          name: file.name,
+          fileType: file.type || 'application/octet-stream',
+          size: file.size,
+          createdAt: Date.now(),
+          blob: file,
+          parentId,
+          position: siblings.length,
+        };
+        setFiles((prev) => [...prev, item]);
+        enqueueSave(() => db.putFile(item));
+      }, [files]);
+
+      const renameFolder = useCallback((id, name) => {
+        setFolders((prev) => {
+          const next = prev.map((f) => (f.id === id ? { ...f, name } : f));
+          const updated = next.find((f) => f.id === id);
+          if (updated) persistFolder(updated);
+          return next;
+        });
+      }, [persistFolder]);
+
+      const renameFile = useCallback((id, name) => {
+        setFiles((prev) => {
+          const next = prev.map((f) => (f.id === id ? { ...f, name } : f));
+          const updated = next.find((f) => f.id === id);
+          if (updated) persistFile(updated);
+          return next;
+        });
+      }, [persistFile]);
+
+      const setFolderCover = useCallback((id, coverImage) => {
+        setFolders((prev) => {
+          const next = prev.map((f) => (f.id === id ? { ...f, coverImage } : f));
+          const updated = next.find((f) => f.id === id);
+          if (updated) persistFolder(updated);
+          return next;
+        });
+      }, [persistFolder]);
+
+      const setFolderViewMode = useCallback((id, viewMode) => {
+        setFolders((prev) => {
+          const next = prev.map((f) => (f.id === id ? { ...f, viewMode } : f));
+          const updated = next.find((f) => f.id === id);
+          if (updated) persistFolder(updated);
+          return next;
+        });
+      }, [persistFolder]);
+
+      const moveItem = useCallback((id, newParentId) => {
+        setFolders((prev) => {
+          const next = prev.map((f) => (f.id === id ? { ...f, parentId: newParentId } : f));
+          const updated = next.find((f) => f.id === id);
+          if (updated) persistFolder(updated);
+          return next;
+        });
+        setFiles((prev) => {
+          const next = prev.map((f) => (f.id === id ? { ...f, parentId: newParentId } : f));
+          const updated = next.find((f) => f.id === id);
+          if (updated) persistFile(updated);
+          return next;
+        });
+      }, [persistFolder, persistFile]);
+
+      const deleteFolder = useCallback((id) => {
+        const childFolderIds = new Set();
+        const collect = (pid) => {
+          folders.forEach((f) => {
+            if (f.parentId === pid) {
+              childFolderIds.add(f.id);
+              collect(f.id);
+            }
+          });
+        };
+        collect(id);
+        childFolderIds.add(id);
+        setFolders((prev) => {
+          const next = prev.filter((f) => !childFolderIds.has(f.id));
+          childFolderIds.forEach((fid) => enqueueSave(() => db.deleteFolder(fid)));
+          return next;
+        });
+        setFiles((prev) => {
+          const toDelete = prev.filter((f) => childFolderIds.has(f.parentId || ''));
+          toDelete.forEach((f) => enqueueSave(() => db.deleteFile(f.id)));
+          return prev.filter((f) => !childFolderIds.has(f.parentId || ''));
+        });
+      }, [folders]);
+
+      const deleteFile = useCallback((id) => {
+        setFiles((prev) => prev.filter((f) => f.id !== id));
+        enqueueSave(() => db.deleteFile(id));
+      }, []);
+
+      const reorderChildren = useCallback((orderedIds) => {
+        const folderMap = new Map(folders.map((f) => [f.id, f]));
+        const fileMap = new Map(files.map((f) => [f.id, f]));
+        orderedIds.forEach((id, idx) => {
+          if (folderMap.has(id)) {
+            const updated = { ...folderMap.get(id), position: idx };
+            folderMap.set(id, updated);
+            persistFolder(updated);
+          } else if (fileMap.has(id)) {
+            const updated = { ...fileMap.get(id), position: idx };
+            fileMap.set(id, updated);
+            persistFile(updated);
+          }
+        });
+        setFolders((prev) => prev.map((f) => folderMap.get(f.id) || f));
+        setFiles((prev) => prev.map((f) => fileMap.get(f.id) || f));
+      }, [folders, files, persistFolder, persistFile]);
+
+      return {
+        loaded,
+        folders,
+        files,
+        path,
+        children,
+        currentFolderId,
+        currentFolder,
+        currentViewMode,
+        setCurrentFolderId,
+        createFolder,
+        addFile,
+        renameFolder,
+        renameFile,
+        setFolderCover,
+        setFolderViewMode,
+        moveItem,
+        deleteFolder,
+        deleteFile,
+        reorderChildren,
+      };
+    }
+
+    // --- COMPONENTS ---
+    function Modal({ open, onClose, title, children }) {
+      useEffect(() => {
+        if (!open) return;
+        const handler = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+      }, [open, onClose]);
+
+      if (!open) return null;
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+          <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
+              <h2 className="text-lg font-semibold text-white">{title}</h2>
+              <button onClick={onClose} className="p-2 -mr-2 text-zinc-400 hover:text-white transition-colors">
+                <Icon name="x" size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto px-5 py-4">{children}</div>
+          </div>
+        </div>
+      );
+    }
+
+    function ContextMenu({ x, y, onClose, children }) {
+      const ref = useRef(null);
+      const [pos, setPos] = useState({ x, y });
+
+      useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        let nx = x;
+        let ny = y;
+        if (x + rect.width > window.innerWidth - 8) nx = window.innerWidth - rect.width - 8;
+        if (y + rect.height > window.innerHeight - 8) ny = window.innerHeight - rect.height - 8;
+        setPos({ x: Math.max(8, nx), y: Math.max(8, ny) });
+      }, [x, y]);
+
+      useEffect(() => {
+        const close = () => onClose();
+        window.addEventListener('scroll', close, true);
+        return () => window.removeEventListener('scroll', close, true);
+      }, [onClose]);
+
+      return (
+        <>
+          <div className="fixed inset-0 z-40" onClick={onClose} />
+          <div ref={ref} style={{ left: pos.x, top: pos.y }} className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl py-1.5 min-w-[200px] overflow-hidden">
+            {children}
+          </div>
+        </>
+      );
+    }
+
+    function MenuItem({ icon, label, onClick, danger }) {
+      return (
+        <button
+          onClick={onClick}
+          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+            danger ? 'text-red-400 hover:bg-red-500/10' : 'text-zinc-200 hover:bg-zinc-800'
+          }`}
+        >
+          <Icon name={icon} size={16} />
+          {label}
+        </button>
+      );
+    }
+
+    function FileImagePreview({ file }) {
+      const [src, setSrc] = useState(null);
+      useEffect(() => {
+        if (!file.blob) return;
+        const u = URL.createObjectURL(file.blob);
+        setSrc(u);
+        return () => URL.revokeObjectURL(u);
+      }, [file.blob]);
+
+      if (!src) return <div className="w-full h-full flex items-center justify-center"><Icon name="image" size={48} className="text-zinc-600" /></div>;
+      return <img src={src} alt={file.name} className="w-full h-full object-cover" />;
+    }
+
+    function getItemIcon(item) {
+      if (isFolder(item)) return 'folder';
+      const kind = getFileKind(item.fileType, item.name);
+      if (kind === 'Image') return 'image';
+      if (kind === 'Video') return 'film';
+      if (kind === 'Audio') return 'music';
+      return 'file-text';
+    }
+
+    function ItemCard({ item, onOpen, onMenu, onShare, dragHandleProps }) {
+      const folder = isFolder(item) ? item : null;
+      const file = !isFolder(item) ? item : null;
+
+      return (
+        <div
+          {...(dragHandleProps || {})}
+          className={`group relative bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-all ${
+            dragHandleProps?.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+          } hover:border-zinc-600`}
+          onClick={onOpen}
+        >
+          <div className="aspect-square bg-zinc-950 relative overflow-hidden">
+            {folder?.coverImage ? (
+              <img src={folder.coverImage} alt={folder.name} className="w-full h-full object-cover" />
+            ) : file?.fileType.startsWith('image/') ? (
+              <FileImagePreview file={file} />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Icon name={getItemIcon(item)} size={48} className="text-zinc-600" />
+              </div>
+            )}
+            {folder && <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />}
+            {folder && (
+              <div className="absolute bottom-2 left-2 flex items-center gap-1.5 text-white/90">
+                <Icon name="folder" size={14} />
+                <span className="text-xs font-medium">Folder</span>
+              </div>
+            )}
+            {file && (
+              <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
+                {getFileKind(file.fileType, file.name)}
+              </div>
+            )}
+          </div>
+
+          <div className="px-3 py-2.5">
+            <div className="flex items-center gap-1">
+              <p className="flex-1 text-sm font-medium text-white truncate">{item.name}</p>
+              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onShare(); }} className="p-1.5 -mr-1 text-zinc-400 hover:text-white shrink-0">
+                <Icon name="share" size={15} />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); e.preventDefault(); onMenu(e); }} className="p-1.5 text-zinc-400 hover:text-white shrink-0">
+                <Icon name="more-vertical" size={15} />
+              </button>
+            </div>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {folder ? formatDate(Date.now()) : `${formatBytes(file.size)} · ${formatDate(file.createdAt)}`}
+            </p>
+          </div>
+
+          {dragHandleProps?.draggable && (
+            <div className="absolute top-1.5 left-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Icon name="grip-vertical" size={16} className="text-white/50" />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function ItemRow({ item, onOpen, onMenu, onShare, onMoveUp, onMoveDown, canMoveUp, canMoveDown, dragHandleProps }) {
+      const folder = isFolder(item) ? item : null;
+      const file = !isFolder(item) ? item : null;
+
+      return (
+        <div
+          {...(dragHandleProps || {})}
+          className={`group flex items-center gap-3 px-3 py-2.5 border-b border-zinc-800/50 transition-colors ${
+            dragHandleProps?.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+          } hover:bg-zinc-800/50`}
+          onClick={onOpen}
+        >
+          <div className="w-11 h-11 rounded-lg bg-zinc-950 border border-zinc-800 overflow-hidden shrink-0 flex items-center justify-center">
+            {folder?.coverImage ? (
+              <img src={folder.coverImage} alt="" className="w-full h-full object-cover" />
+            ) : file?.fileType.startsWith('image/') ? (
+              <FileImagePreview file={file} />
+            ) : (
+              <Icon name={getItemIcon(item)} size={20} className="text-zinc-500" />
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white truncate">{item.name}</p>
+            <p className="text-xs text-zinc-500 truncate">
+              {folder ? 'Folder' : `${getFileKind(file.fileType, file.name)} · ${formatBytes(file.size)}`}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-0.5 shrink-0">
+            <button onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }} disabled={!canMoveUp} className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-30">
+              <Icon name="chevron-up" size={14} />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }} disabled={!canMoveDown} className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-30">
+              <Icon name="chevron-down" size={14} />
+            </button>
+          </div>
+
+          <button onClick={(e) => { e.stopPropagation(); onShare(); }} className="p-2 text-zinc-400 hover:text-white shrink-0">
+            <Icon name="share" size={16} />
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onMenu(e); }} className="p-2 -mr-1 text-zinc-400 hover:text-white shrink-0">
+            <Icon name="more-vertical" size={16} />
+          </button>
+        </div>
+      );
+    }
+
+    // --- MAIN APP ---
+    function App() {
+      const store = useFileStore();
+      const [menuTarget, setMenuTarget] = useState(null);
+      const [confirmTarget, setConfirmTarget] = useState(null);
+      const [renameTarget, setRenameTarget] = useState(null);
+      const [renameValue, setRenameValue] = useState('');
+      const [coverTarget, setCoverTarget] = useState(null);
+      const [moveTarget, setMoveTarget] = useState(null);
+      const [newFolderOpen, setNewFolderOpen] = useState(false);
+      const [newFolderName, setNewFolderName] = useState('');
+      const [busy, setBusy] = useState(false);
+
+      const fileInputRef = useRef(null);
+      const photoInputRef = useRef(null);
+      const coverInputRef = useRef(null);
+
+      const dragId = useRef(null);
+      const [dragOverId, setDragOverId] = useState(null);
+
+      if (!store.loaded) {
+        return (
+          <div className="min-h-screen bg-black flex items-center justify-center">
+            <Icon name="loader-2" size={32} className="animate-spin text-zinc-600" />
+          </div>
+        );
+      }
+
+      const handleImportFile = () => fileInputRef.current?.click();
+      const handleImportPhoto = () => photoInputRef.current?.click();
+
+      const handleFileSelected = async (e) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        setBusy(true);
+        for (const file of Array.from(files)) {
+          await store.addFile(file, store.currentFolderId);
+        }
+        setBusy(false);
+        e.target.value = '';
+      };
+
+      const handleCoverSelected = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || !coverTarget) return;
+        setBusy(true);
+        const dataUrl = await compressImage(file, 400, 0.8);
+        store.setFolderCover(coverTarget.id, dataUrl);
+        setCoverTarget(null);
+        setBusy(false);
+        e.target.value = '';
+      };
+
+      const handleShare = async (item) => {
+        if (isFolder(item)) return;
+        const file = item;
+        try {
+          const shareData = { title: file.name, text: file.name };
+          if (navigator.canShare && navigator.canShare({ files: [new File([file.blob], file.name, { type: file.fileType })] })) {
+            shareData.files = [new File([file.blob], file.name, { type: file.fileType })];
+            await navigator.share(shareData);
+          } else if (navigator.share) {
+            await navigator.share(shareData);
+          } else {
+            const url = URL.createObjectURL(file.blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          }
+        } catch {}
+      };
+
+      const handleCreateFolder = () => {
+        const name = newFolderName.trim() || 'New Folder';
+        store.createFolder(name, store.currentFolderId);
+        setNewFolderName('');
+        setNewFolderOpen(false);
+      };
+
+      const handleRename = () => {
+        if (!renameTarget) return;
+        const name = renameValue.trim();
+        if (!name) return;
+        if (isFolder(renameTarget)) {
+          store.renameFolder(renameTarget.id, name);
+        } else {
+          store.renameFile(renameTarget.id, name);
+        }
+        setRenameTarget(null);
+      };
+
+      const handleMove = (targetId) => {
+        if (!moveTarget) return;
+        if (moveTarget.id === targetId) return;
+        store.moveItem(moveTarget.id, targetId);
+        setMoveTarget(null);
+      };
+
+      const handleDelete = () => {
+        if (!confirmTarget) return;
+        if (confirmTarget.type === 'folder') {
+          store.deleteFolder(confirmTarget.id);
+        } else {
+          store.deleteFile(confirmTarget.id);
+        }
+        setConfirmTarget(null);
+      };
+
+      const handleDragStart = (id) => (e) => {
+        dragId.current = id;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', id);
+      };
+
+      const handleDragOver = (id) => (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragId.current && dragId.current !== id) setDragOverId(id);
+      };
+
+      const handleDrop = (id) => (e) => {
+        e.preventDefault();
+        const draggedId = dragId.current;
+        if (!draggedId || draggedId === id) return;
+        const ids = store.children.map((c) => c.id);
+        const fromIdx = ids.indexOf(draggedId);
+        const toIdx = ids.indexOf(id);
+        if (fromIdx === -1 || toIdx === -1) return;
+        ids.splice(fromIdx, 1);
+        ids.splice(toIdx, 0, draggedId);
+        store.reorderChildren(ids);
+        dragId.current = null;
+        setDragOverId(null);
+      };
+
+      const handleDragEnd = () => {
+        dragId.current = null;
+        setDragOverId(null);
+      };
+
+      const moveByArrow = (id, direction) => {
+        const ids = store.children.map((c) => c.id);
+        const idx = ids.indexOf(id);
+        if (idx === -1) return;
+        const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (newIdx < 0 || newIdx >= ids.length) return;
+        ids.splice(idx, 1);
+        ids.splice(newIdx, 0, id);
+        store.reorderChildren(ids);
+      };
+
+      const dragProps = (id) => ({
+        draggable: true,
+        onDragStart: handleDragStart(id),
+        onDragEnd: handleDragEnd,
+        onDragOver: handleDragOver(id),
+        onDrop: handleDrop(id),
+      });
+
+      const openItem = (item) => {
+        if (isFolder(item)) {
+          store.setCurrentFolderId(item.id);
+        }
+      };
+
+      const openMenu = (item) => (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMenuTarget({ item, x: e.clientX, y: e.clientY });
+      };
+
+      const toggleViewMode = () => {
+        if (store.currentFolderId === null) return;
+        const newMode = store.currentViewMode === 'grid' ? 'list' : 'grid';
+        store.setFolderViewMode(store.currentFolderId, newMode);
+      };
+
+      const moveFolderOptions = store.folders.filter(
+        (f) => f.id !== moveTarget?.id && f.parentId !== moveTarget?.id
+      );
+
+      return (
+        <div className="min-h-screen bg-black text-white flex flex-col">
+          <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
+          <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelected} />
+          <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={handleCoverSelected} />
+
+          <header className="sticky top-0 z-30 bg-black/90 backdrop-blur-lg border-b border-zinc-900">
+            <div className="px-4 pt-3 pb-2">
+              <div className="flex items-center gap-1 text-sm overflow-x-auto no-scrollbar mb-2">
+                <button onClick={() => store.setCurrentFolderId(null)} className="flex items-center gap-1 text-zinc-400 hover:text-white shrink-0">
+                  <Icon name="home" size={14} />
+                </button>
+                {store.path.map((f) => (
+                  <div key={f.id} className="flex items-center gap-1 shrink-0">
+                    <Icon name="chevron-right" size={12} className="text-zinc-600" />
+                    <button onClick={() => store.setCurrentFolderId(f.id)} className="text-zinc-400 hover:text-white truncate max-w-[120px]">
+                      {f.name}
+                    </button>
+                  </div>
+                ))}
+                {store.currentFolder && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Icon name="chevron-right" size={12} className="text-zinc-600" />
+                    <span className="text-white font-medium truncate max-w-[120px]">
+                      {store.currentFolder.name}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <h1 className="flex-1 text-lg font-bold text-white truncate">
+                  {store.currentFolder?.name || 'Aiden Files'}
+                </h1>
+                <button
+                  onClick={toggleViewMode}
+                  disabled={store.currentFolderId === null}
+                  className="p-2 text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 rounded-lg disabled:opacity-40 transition-colors"
+                >
+                  <Icon name={store.currentViewMode === 'grid' ? 'list' : 'grid-3x3'} size={18} />
+                </button>
+                <button onClick={() => setNewFolderOpen(true)} className="p-2 text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 rounded-lg transition-colors">
+                  <Icon name="plus" size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-4 pb-3 flex gap-2">
+              <button onClick={handleImportFile} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-200 hover:bg-zinc-800 transition-colors">
+                <Icon name="file-up" size={16} />
+                Import File
+              </button>
+              <button onClick={handleImportPhoto} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-sm font-medium text-zinc-200 hover:bg-zinc-800 transition-colors">
+                <Icon name="image-plus" size={16} />
+                Import Photo
+              </button>
+            </div>
+          </header>
+
+          <main className="flex-1 px-4 py-4 pb-24">
+            {store.children.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <Icon name="folder" size={48} className="text-zinc-700 mb-3" />
+                <p className="text-zinc-500 text-sm">This folder is empty</p>
+                <p className="text-zinc-600 text-xs mt-1">Import files or create a folder to get started</p>
+              </div>
+            ) : store.currentViewMode === 'grid' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {store.children.map((item) => (
+                  <div key={item.id} className={dragOverId === item.id ? 'ring-2 ring-blue-500 rounded-2xl' : ''}>
+                    <ItemCard
+                      item={item}
+                      onOpen={() => openItem(item)}
+                      onMenu={openMenu(item)}
+                      onShare={() => handleShare(item)}
+                      dragHandleProps={dragProps(item.id)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+                {store.children.map((item, idx) => (
+                  <div key={item.id} className={dragOverId === item.id ? 'ring-2 ring-blue-500' : ''}>
+                    <ItemRow
+                      item={item}
+                      onOpen={() => openItem(item)}
+                      onMenu={openMenu(item)}
+                      onShare={() => handleShare(item)}
+                      onMoveUp={() => moveByArrow(item.id, 'up')}
+                      onMoveDown={() => moveByArrow(item.id, 'down')}
+                      canMoveUp={idx > 0}
+                      canMoveDown={idx < store.children.length - 1}
+                      dragHandleProps={dragProps(item.id)}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </main>
+
+          {busy && (
+            <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center">
+              <Icon name="loader-2" size={32} className="animate-spin text-white" />
+            </div>
+          )}
+
+          {menuTarget && (
+            <ContextMenu x={menuTarget.x} y={menuTarget.y} onClose={() => setMenuTarget(null)}>
+              <MenuItem
+                icon="pencil"
+                label="Rename"
+                onClick={() => {
+                  setRenameTarget(menuTarget.item);
+                  setRenameValue(menuTarget.item.name);
+                  setMenuTarget(null);
+                }}
+              />
+              {isFolder(menuTarget.item) && (
+                <MenuItem
+                  icon="image"
+                  label="Change Cover Image"
+                  onClick={() => {
+                    setCoverTarget(menuTarget.item);
+                    setMenuTarget(null);
+                    setTimeout(() => coverInputRef.current?.click(), 100);
+                  }}
+                />
+              )}
+              <MenuItem
+                icon="folder-input"
+                label="Move to Folder"
+                onClick={() => {
+                  setMoveTarget(menuTarget.item);
+                  setMenuTarget(null);
+                }}
+              />
+              <MenuItem
+                icon={store.currentViewMode === 'grid' ? 'list' : 'grid-3x3'}
+                label={store.currentViewMode === 'grid' ? 'Switch to List View' : 'Switch to Grid View'}
+                onClick={() => {
+                  toggleViewMode();
+                  setMenuTarget(null);
+                }}
+              />
+              <MenuItem
+                icon="share"
+                label="Open With / Share"
+                onClick={() => {
+                  handleShare(menuTarget.item);
+                  setMenuTarget(null);
+                }}
+              />
+              <MenuItem
+                icon="trash-2"
+                label="Delete"
+                danger
+                onClick={() => {
+                  const item = menuTarget.item;
+                  setConfirmTarget({
+                    type: isFolder(item) ? 'folder' : 'file',
+                    id: item.id,
+                    name: item.name,
+                  });
+                  setMenuTarget(null);
+                }}
+              />
+            </ContextMenu>
+          )}
+
+          <Modal open={!!renameTarget} onClose={() => setRenameTarget(null)} title="Rename">
+            <input
+              autoFocus
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleRename()}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-zinc-500"
+              placeholder="Enter new name"
+            />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setRenameTarget(null)} className="flex-1 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-sm text-zinc-300">
+                Cancel
+              </button>
+              <button onClick={handleRename} className="flex-1 py-2.5 bg-white text-black rounded-xl text-sm font-medium">
+                Save
+              </button>
+            </div>
+          </Modal>
+
+          <Modal open={newFolderOpen} onClose={() => setNewFolderOpen(false)} title="New Folder">
+            <input
+              autoFocus
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-zinc-500"
+              placeholder="Folder name"
+            />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setNewFolderOpen(false)} className="flex-1 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-sm text-zinc-300">
+                Cancel
+              </button>
+              <button onClick={handleCreateFolder} className="flex-1 py-2.5 bg-white text-black rounded-xl text-sm font-medium">
+                Create
+              </button>
+            </div>
+          </Modal>
+
+          <Modal open={!!moveTarget} onClose={() => setMoveTarget(null)} title="Move to Folder">
+            <div className="space-y-1">
+              <button onClick={() => handleMove(null)} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm text-white transition-colors">
+                <Icon name="home" size={16} className="text-zinc-400" />
+                Home (Root)
+              </button>
+              {moveFolderOptions.map((f) => (
+                <button key={f.id} onClick={() => handleMove(f.id)} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sm text-white transition-colors">
+                  <Icon name="folder" size={16} className="text-zinc-400" />
+                  {f.name}
+                </button>
+              ))}
+              {moveFolderOptions.length === 0 && (
+                <p className="text-zinc-500 text-sm text-center py-4">No folders available</p>
+              )}
+            </div>
+          </Modal>
+
+          <Modal open={!!confirmTarget} onClose={() => setConfirmTarget(null)} title="Delete">
+            <div className="text-center py-2">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+                <Icon name="trash-2" size={24} className="text-red-400" />
+              </div>
+              <p className="text-white text-sm mb-1">
+                Delete {confirmTarget?.type === 'folder' ? 'folder' : 'file'} "{confirmTarget?.name}"?
+              </p>
+              {confirmTarget?.type === 'folder' && (
+                <p className="text-zinc-500 text-xs mb-4">
+                  All contents inside this folder will also be deleted.
+                </p>
+              )}
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => setConfirmTarget(null)} className="flex-1 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-sm text-zinc-300">
+                  Cancel
+                </button>
+                <button onClick={handleDelete} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium">
+                  Delete
+                </button>
+              </div>
+            </div>
+          </Modal>
+        </div>
+      );
+    }
+
+    // Render application
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
