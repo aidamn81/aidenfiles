@@ -75,25 +75,18 @@
     const uid = () => Math.random().toString(36).substring(2, 9);
     const isFolder = item => !('fileType' in item);
 
-    // --- HELPER FOR MEDIA PLAYBACK (iOS WebKit Blob URL conversion) ---
-    function dataURLtoBlobUrl(dataUrl) {
+    // --- ROBUST MEDIA PLAYBACK HELPER (Blob URL generation for audio/video) ---
+    async function getOrCreateBlobUrl(file) {
+      if (file.blobUrl) return file.blobUrl;
+      if (!file.dataUrl) return '';
       try {
-        if (!dataUrl) return '';
-        if (dataUrl.startsWith('blob:')) return dataUrl;
-        const parts = dataUrl.split(',');
-        const mimeMatch = parts[0].match(/:(.*?);/);
-        const mime = mimeMatch ? mimeMatch[1] : 'audio/mpeg';
-        const bstr = atob(parts[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n);
-        }
-        const blob = new Blob([u8arr], { type: mime });
-        return URL.createObjectURL(blob);
+        const res = await fetch(file.dataUrl);
+        const blob = await res.blob();
+        file.blobUrl = URL.createObjectURL(blob);
+        return file.blobUrl;
       } catch (e) {
-        console.error("Error converting Data URL to Blob URL:", e);
-        return dataUrl;
+        console.error("Error generating Blob URL for media:", e);
+        return file.dataUrl;
       }
     }
 
@@ -131,6 +124,13 @@
         });
       }
 
+      // Pre-generate blob URLs for audio/video files
+      for (let file of state.files) {
+        if (file.dataUrl && (file.fileType?.startsWith('video/') || file.fileType?.startsWith('audio/'))) {
+          await getOrCreateBlobUrl(file);
+        }
+      }
+
       if (state.folders.length === 0) {
         const root = { id: 'root', name: 'Aiden Files', parentId: null, width: 96, height: 96 };
         state.folders = [root];
@@ -151,7 +151,10 @@
       const db = await openDB();
       if (db) {
         const tx = db.transaction('files', 'readwrite');
-        tx.objectStore('files').put(file);
+        // Do not persist transient blobUrl in IndexedDB
+        const fileToSave = { ...file };
+        delete fileToSave.blobUrl;
+        tx.objectStore('files').put(fileToSave);
       }
     }
 
@@ -192,6 +195,13 @@
             const remoteContent = JSON.parse(decodeURIComponent(escape(atob(getJson.content))));
             state.folders = remoteContent.folders || state.folders;
             state.files = remoteContent.files || state.files;
+
+            for (let file of state.files) {
+              if (file.dataUrl && (file.fileType?.startsWith('video/') || file.fileType?.startsWith('audio/'))) {
+                await getOrCreateBlobUrl(file);
+              }
+            }
+
             for (let f of state.folders) await saveFolder(f);
             for (let fi of state.files) await saveFile(fi);
             alert('Synced data down from Cloud!');
@@ -483,29 +493,28 @@
     // --- QUICK VIEW & MEDIA PLAYER MODAL ---
     function renderQuickViewContent(file) {
       const type = file.fileType || '';
+      const mediaUrl = file.blobUrl || file.dataUrl;
       
       if (type.startsWith('image/')) {
         return `<img src="${file.dataUrl}" class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl" />`;
       }
       
       if (type.startsWith('video/')) {
-        const videoBlobUrl = dataURLtoBlobUrl(file.dataUrl);
         return `
-          <video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black" src="${videoBlobUrl}">
+          <video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black" src="${mediaUrl}">
             Your browser does not support playing this video.
           </video>
         `;
       }
 
       if (type.startsWith('audio/')) {
-        const audioBlobUrl = dataURLtoBlobUrl(file.dataUrl);
         return `
           <div class="flex flex-col items-center gap-6 p-8 bg-zinc-900 border border-zinc-800 rounded-3xl max-w-sm w-full shadow-2xl text-center">
             <div class="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-400">
               <i data-lucide="music" class="w-10 h-10"></i>
             </div>
             <span class="text-sm font-semibold text-zinc-200 max-w-full truncate">${file.name}</span>
-            <audio controls playsinline autoplay class="w-full" src="${audioBlobUrl}">
+            <audio controls playsinline autoplay class="w-full" src="${mediaUrl}">
               Your browser does not support audio playback.
             </audio>
           </div>
@@ -662,6 +671,10 @@
           const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
           delete newFile.x;
           delete newFile.y;
+          delete newFile.blobUrl;
+          if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) {
+            await getOrCreateBlobUrl(newFile);
+          }
           state.files.push(newFile);
           await saveFile(newFile);
         }
@@ -676,6 +689,10 @@
         const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
         delete newFile.x;
         delete newFile.y;
+        delete newFile.blobUrl;
+        if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) {
+          await getOrCreateBlobUrl(newFile);
+        }
         state.files.push(newFile);
         await saveFile(newFile);
         alert('File copied successfully!');
@@ -749,6 +766,10 @@
         const item = state.files.find(f => f.id === state.targetChangeImageId);
         if (item) {
           item.dataUrl = base64;
+          if (item.fileType?.startsWith('video/') || item.fileType?.startsWith('audio/')) {
+            item.blobUrl = '';
+            await getOrCreateBlobUrl(item);
+          }
           await saveFile(item);
           render();
         }
@@ -863,11 +884,24 @@
         let dataUrl = await fileToBase64(file);
         let textContent = null;
         let inferredType = getMimeType(file);
+        let blobUrl = '';
 
-        if (inferredType.startsWith('text/') || file.name.endsWith('.txt')) {
+        if (inferredType.startsWith('video/') || inferredType.startsWith('audio/')) {
+          blobUrl = URL.createObjectURL(file);
+        } else if (inferredType.startsWith('text/') || file.name.endsWith('.txt')) {
           try {
             textContent = await fileToText(file);
           } catch (e) { console.error(e); }
+        }
+
+        if (!blobUrl && dataUrl) {
+          try {
+            const res = await fetch(dataUrl);
+            const blob = await res.blob();
+            blobUrl = URL.createObjectURL(blob);
+          } catch (e) {
+            blobUrl = dataUrl;
+          }
         }
 
         const item = {
@@ -876,6 +910,7 @@
           fileType: inferredType,
           size: file.size,
           dataUrl: dataUrl,
+          blobUrl: blobUrl,
           textContent: textContent,
           parentId: state.currentFolderId,
           width: 112,
