@@ -44,7 +44,7 @@
 
   <!-- Hidden Inputs -->
   <input id="file-input" type="file" multiple class="hidden" />
-  <input id="photo-input" type="file" accept="image/*" multiple class="hidden" />
+  <input id="photo-input" type="file" accept="image/*,video/*" multiple class="hidden" />
   <input id="change-image-input" type="file" accept="image/*" class="hidden" />
   <input id="folder-cover-input" type="file" accept="image/*" class="hidden" />
 
@@ -295,6 +295,14 @@
       attachDragAndResizeListeners();
     }
 
+    function getFileIcon(type, name) {
+      if (type.startsWith('video/')) return 'video';
+      if (type.startsWith('audio/')) return 'music';
+      if (type === 'application/pdf' || name.endsWith('.pdf')) return 'file-text';
+      if (type.startsWith('text/') || name.endsWith('.txt')) return 'file-text';
+      return 'file';
+    }
+
     function renderItem(item, index) {
       const col = index % 4;
       const row = Math.floor(index / 4);
@@ -341,7 +349,10 @@
           </div>
         `;
       } else {
+        const type = item.fileType || '';
+        const isImage = type.startsWith('image/');
         const imgSrc = item.dataUrl || item.thumbnailData;
+        const icon = getFileIcon(type, item.name);
 
         return `
           <div 
@@ -352,10 +363,16 @@
             onclick="handleItemClick(event, '${item.id}', false)"
           >
             <div class="flex-1 bg-zinc-950 relative overflow-hidden flex items-center justify-center">
-              ${imgSrc ? `
+              ${isImage && imgSrc ? `
                 <img src="${imgSrc}" class="w-full h-full object-cover pointer-events-none" alt="${item.name}" />
               ` : `
-                <i data-lucide="file-text" class="text-zinc-500 w-8 h-8 pointer-events-none"></i>
+                <div class="flex flex-col items-center gap-1 text-zinc-400">
+                  <i data-lucide="${icon}" class="w-8 h-8 text-amber-400 pointer-events-none"></i>
+                  ${type.startsWith('video/') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Video</span>' : ''}
+                  ${type.startsWith('audio/') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Audio</span>' : ''}
+                  ${type === 'application/pdf' ? '<span class="text-[9px] uppercase font-bold tracking-wider text-red-400">PDF</span>' : ''}
+                  ${type.startsWith('text/') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-blue-400">TEXT</span>' : ''}
+                </div>
               `}
 
               ${state.selectMode ? `
@@ -391,7 +408,10 @@
             </button>
           ` : `
             <button onclick="openQuickView('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-              <i data-lucide="eye" class="w-3.5 h-3.5 text-zinc-400"></i> Quick View
+              <i data-lucide="eye" class="w-3.5 h-3.5 text-zinc-400"></i> Open / Preview
+            </button>
+            <button onclick="shareFile('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
+              <i data-lucide="share" class="w-3.5 h-3.5 text-zinc-400"></i> Share (iOS)
             </button>
             <button onclick="triggerChangeImage('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
               <i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400"></i> Change Image
@@ -426,7 +446,7 @@
                 <i data-lucide="file" class="w-4 h-4 text-amber-400"></i> Files App
               </button>
               <button onclick="document.getElementById('photo-input').click(); closeUploadModal();" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2">
-                <i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Photos App
+                <i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Photos & Videos
               </button>
               <button onclick="openNewFolderModal(); closeUploadModal();" class="w-full py-3 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2 border border-zinc-700/50">
                 <i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i> New Folder
@@ -438,7 +458,61 @@
       `;
     }
 
-    // --- QUICK VIEW MODAL ---
+    // --- QUICK VIEW & MEDIA PLAYER MODAL ---
+    function renderQuickViewContent(file) {
+      const type = file.fileType || '';
+      
+      if (type.startsWith('image/')) {
+        return `<img src="${file.dataUrl}" class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl" />`;
+      }
+      
+      if (type.startsWith('video/')) {
+        return `
+          <video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black">
+            <source src="${file.dataUrl}" type="${type}">
+            Your browser does not support playing this video.
+          </video>
+        `;
+      }
+
+      if (type.startsWith('audio/')) {
+        return `
+          <div class="flex flex-col items-center gap-6 p-8 bg-zinc-900 border border-zinc-800 rounded-3xl max-w-sm w-full shadow-2xl text-center">
+            <div class="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-400">
+              <i data-lucide="music" class="w-10 h-10"></i>
+            </div>
+            <span class="text-sm font-semibold text-zinc-200 max-w-full truncate">${file.name}</span>
+            <audio controls autoplay class="w-full">
+              <source src="${file.dataUrl}" type="${type}">
+              Your browser does not support audio playback.
+            </audio>
+          </div>
+        `;
+      }
+
+      if (type === 'application/pdf' || file.name.endsWith('.pdf')) {
+        return `
+          <iframe src="${file.dataUrl}" class="w-full h-full rounded-2xl border border-zinc-800 bg-white"></iframe>
+        `;
+      }
+
+      if (type.startsWith('text/') || file.name.endsWith('.txt')) {
+        return `
+          <div class="w-full h-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 overflow-auto text-xs font-mono text-zinc-300 whitespace-pre-wrap select-text">
+            ${file.textContent || 'No text content available.'}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="flex flex-col items-center gap-3 text-zinc-500">
+          <i data-lucide="file-text" class="w-16 h-16"></i>
+          <span class="text-xs text-zinc-400">${file.name}</span>
+          <span class="text-[10px] text-zinc-600">Preview not directly available. Use Share to open in native apps.</span>
+        </div>
+      `;
+    }
+
     function renderQuickViewModal() {
       const file = state.files.find(f => f.id === state.quickViewFileId);
       if (!file) return '';
@@ -453,14 +527,7 @@
           </div>
 
           <div class="flex-1 flex items-center justify-center overflow-hidden my-4" onclick="event.stopPropagation()">
-            ${file.dataUrl ? `
-              <img src="${file.dataUrl}" class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl" />
-            ` : `
-              <div class="flex flex-col items-center gap-3 text-zinc-500">
-                <i data-lucide="file-text" class="w-16 h-16"></i>
-                <span class="text-xs">${file.name}</span>
-              </div>
-            `}
+            ${renderQuickViewContent(file)}
           </div>
 
           <!-- Quick View Action Toolbar -->
@@ -595,14 +662,37 @@
       }
     }
 
+    // iOS SHARE SHEET API INTEGRATION
     async function shareFile(id) {
       const file = state.files.find(f => f.id === id);
-      if (file && navigator.share) {
+      if (!file) return;
+
+      if (navigator.canShare && file.dataUrl) {
+        try {
+          // Convert Data URL to File Object for Native iOS Share Sheet
+          const res = await fetch(file.dataUrl);
+          const blob = await res.blob();
+          const nativeFile = new File([blob], file.name, { type: file.fileType || blob.type });
+
+          if (navigator.canShare({ files: [nativeFile] })) {
+            await navigator.share({
+              files: [nativeFile],
+              title: file.name
+            });
+            return;
+          }
+        } catch (e) {
+          console.error("Native file share fallback triggered:", e);
+        }
+      }
+
+      // Fallback for URLs or devices that don't support file sharing
+      if (navigator.share) {
         try {
           await navigator.share({ title: file.name, text: file.name, url: file.dataUrl });
         } catch (e) { console.error(e); }
       } else {
-        alert('Sharing is not supported on this device/browser.');
+        alert('Sharing is not supported on this browser/device.');
       }
     }
 
@@ -710,7 +800,7 @@
       }
     }
 
-    // --- FILE CONVERSION ---
+    // --- FILE CONVERSION & PARSING ---
     function fileToBase64(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -720,20 +810,33 @@
       });
     }
 
+    function fileToText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+        reader.readAsText(file);
+      });
+    }
+
     async function handleFileImport(files) {
       for (const file of Array.from(files)) {
-        let dataUrl = null;
+        let dataUrl = await fileToBase64(file);
+        let textContent = null;
 
-        if (file.type.startsWith('image/')) {
-          dataUrl = await fileToBase64(file);
+        if (file.type.startsWith('text/') || file.name.endsWith('.txt')) {
+          try {
+            textContent = await fileToText(file);
+          } catch (e) { console.error(e); }
         }
 
         const item = {
           id: uid(),
           name: file.name,
-          fileType: file.type,
+          fileType: file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream'),
           size: file.size,
           dataUrl: dataUrl,
+          textContent: textContent,
           parentId: state.currentFolderId,
           width: 112,
           height: 128
