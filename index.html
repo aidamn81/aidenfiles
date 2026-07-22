@@ -75,7 +75,7 @@
     const uid = () => Math.random().toString(36).substring(2, 9);
     const isFolder = item => !('fileType' in item);
 
-    // --- HELPER FOR MEDIA PLAYBACK (iOS WebKit requires Blob URLs over Data URIs) ---
+    // --- HELPER FOR MEDIA PLAYBACK (iOS WebKit Blob URL conversion) ---
     function dataURLtoBlobUrl(dataUrl) {
       try {
         if (!dataUrl) return '';
@@ -213,7 +213,7 @@
         else alert('Sync failed. Please check repository permissions.');
       } catch (err) {
         alert('Sync error: ' + err.message);
-      } fontally {
+      } finally {
         state.isSyncing = false;
         render();
       }
