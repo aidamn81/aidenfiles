@@ -468,8 +468,7 @@
       
       if (type.startsWith('video/')) {
         return `
-          <video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black">
-            <source src="${file.dataUrl}" type="${type}">
+          <video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black" src="${file.dataUrl}">
             Your browser does not support playing this video.
           </video>
         `;
@@ -482,8 +481,7 @@
               <i data-lucide="music" class="w-10 h-10"></i>
             </div>
             <span class="text-sm font-semibold text-zinc-200 max-w-full truncate">${file.name}</span>
-            <audio controls autoplay class="w-full">
-              <source src="${file.dataUrl}" type="${type}">
+            <audio controls class="w-full" src="${file.dataUrl}">
               Your browser does not support audio playback.
             </audio>
           </div>
@@ -819,12 +817,32 @@
       });
     }
 
+    function getMimeType(file) {
+      if (file.type) return file.type;
+      const ext = file.name.split('.').pop().toLowerCase();
+      const mimeMap = {
+        'mp3': 'audio/mpeg',
+        'm4a': 'audio/mp4',
+        'aac': 'audio/aac',
+        'wav': 'audio/wav',
+        'ogg': 'audio/ogg',
+        'flac': 'audio/flac',
+        'mp4': 'video/mp4',
+        'mov': 'video/quicktime',
+        'webm': 'video/webm',
+        'pdf': 'application/pdf',
+        'txt': 'text/plain'
+      };
+      return mimeMap[ext] || 'application/octet-stream';
+    }
+
     async function handleFileImport(files) {
       for (const file of Array.from(files)) {
         let dataUrl = await fileToBase64(file);
         let textContent = null;
+        let inferredType = getMimeType(file);
 
-        if (file.type.startsWith('text/') || file.name.endsWith('.txt')) {
+        if (inferredType.startsWith('text/') || file.name.endsWith('.txt')) {
           try {
             textContent = await fileToText(file);
           } catch (e) { console.error(e); }
@@ -833,7 +851,7 @@
         const item = {
           id: uid(),
           name: file.name,
-          fileType: file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream'),
+          fileType: inferredType,
           size: file.size,
           dataUrl: dataUrl,
           textContent: textContent,
