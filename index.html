@@ -28,7 +28,6 @@
     }
     .folder-cube:active { transform: scale(0.95); }
 
-    /* Enlarged Resize Touch Area */
     .resize-handle {
       width: 28px;
       height: 28px;
@@ -75,7 +74,7 @@
     const uid = () => Math.random().toString(36).substring(2, 9);
     const isFolder = item => !('fileType' in item);
 
-    // --- ROBUST MEDIA PLAYBACK HELPER (Blob URL generation for audio/video) ---
+    // --- MEDIA PLAYBACK HELPER ---
     async function getOrCreateBlobUrl(file) {
       if (file.blobUrl) return file.blobUrl;
       if (!file.dataUrl) return '';
@@ -85,7 +84,6 @@
         file.blobUrl = URL.createObjectURL(blob);
         return file.blobUrl;
       } catch (e) {
-        console.error("Error generating Blob URL for media:", e);
         return file.dataUrl;
       }
     }
@@ -164,7 +162,7 @@
       }
     }
 
-    // --- TOKEN MANAGEMENT & GITHUB SYNC ---
+    // --- TOKEN & GITHUB SYNC ---
     function resetToken() {
       const token = prompt('Enter your GitHub Personal Access Token (make sure Contents permission is set to Read and write):', state.ghToken);
       if (token !== null) {
@@ -186,7 +184,6 @@
 
       try {
         const url = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/${CONFIG.ghPath}`;
-        
         const authHeader = state.ghToken.startsWith('ghp_') || state.ghToken.startsWith('gho_') 
           ? `token ${state.ghToken}` 
           : `Bearer ${state.ghToken}`;
@@ -201,7 +198,7 @@
         const getRes = await fetch(url, { headers });
         
         if (getRes.status === 401 || getRes.status === 403) {
-          throw new Error('Authentication or Permission denied (401/403). Please verify your token has Contents: Read and write permissions.');
+          throw new Error('Authentication failed or Insufficient permissions (401/403). Ensure token has Contents: Read and write.');
         }
 
         if (getRes.ok) {
@@ -229,6 +226,12 @@
         }
 
         const jsonString = JSON.stringify({ folders: state.folders, files: state.files });
+        
+        // Safeguard against oversized payloads causing 500 server errors
+        if (jsonString.length > 25 * 1024 * 1024) {
+          throw new Error('Data payload is too large for a single GitHub API commit (>25MB). Please delete some files.');
+        }
+
         const payload = {
           message: 'Sync Aiden Files Data',
           content: btoa(unescape(encodeURIComponent(jsonString))),
@@ -250,21 +253,17 @@
       }
     }
 
-    // --- RENDER ---
+    // --- RENDER & UI ---
     function render() {
       const app = document.getElementById('app');
       const currentFolder = state.folders.find(f => f.id === state.currentFolderId);
       const childrenFolders = state.folders.filter(f => f.parentId === state.currentFolderId && f.id !== 'root');
       const childrenFiles = state.files.filter(f => f.parentId === state.currentFolderId);
       const items = [...childrenFolders, ...childrenFiles];
-
       const allChildrenSelected = items.length > 0 && items.every(item => state.selectedIds.includes(item.id));
 
       app.innerHTML = `
-        <!-- Header Controls in One Single Row on Top (Optimized for iPad & Phone viewports) -->
         <header class="shrink-0 z-30 bg-black/95 backdrop-blur-lg border-b border-zinc-900 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
-          
-          <!-- Left group: Sync, Key, Home, Add Item -->
           <div class="flex items-center gap-1.5 shrink-0">
             <button onclick="syncWithGitHub()" class="px-2.5 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-bold text-zinc-300 flex items-center gap-1.5 shadow-sm">
               <i data-lucide="${state.isSyncing ? 'refresh-cw' : 'cloud'}" class="w-3.5 h-3.5 ${state.isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-400'}"></i>
@@ -273,7 +272,6 @@
             <button onclick="resetToken()" title="Update GitHub token" class="p-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-zinc-400 hover:text-zinc-200">
               <i data-lucide="key" class="w-3.5 h-3.5"></i>
             </button>
-
             <button onclick="navigateTo(null)" class="px-3 py-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md">
               <i data-lucide="home" class="w-4 h-4 text-amber-400"></i> Home
             </button>
@@ -282,13 +280,11 @@
             </button>
           </div>
 
-          <!-- Breadcrumbs in the middle -->
           <div class="flex items-center gap-1 text-xs text-zinc-400 truncate px-2 shrink">
             <span onclick="navigateTo(null)" class="cursor-pointer hover:text-white">Home</span>
             ${currentFolder ? `<span class="text-zinc-600">/</span><span class="text-white font-semibold truncate">${currentFolder.name}</span>` : ''}
           </div>
 
-          <!-- Right group: Select All, Select, Edit -->
           <div class="flex items-center gap-1.5 shrink-0">
             ${state.selectMode ? `
               <button onclick="toggleSelectAll()" class="px-2.5 py-2 bg-indigo-950 border border-indigo-700 rounded-xl text-xs font-bold text-indigo-300 flex items-center gap-1 shadow-sm">
@@ -296,18 +292,15 @@
                 ${allChildrenSelected ? 'Deselect All' : 'Select All'}
               </button>
             ` : ''}
-
             <button onclick="toggleSelectMode()" class="px-3 py-2 rounded-xl text-xs font-bold border ${state.selectMode ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}">
               ${state.selectMode ? 'Cancel' : 'Select'}
             </button>
-
             <button onclick="toggleEditMode()" class="px-3 py-2 rounded-xl text-xs font-bold border ${state.editMode ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}">
               ${state.editMode ? 'Done' : 'Edit'}
             </button>
           </div>
         </header>
 
-        <!-- Canvas Area -->
         <main onclick="closeMenu()" class="flex-1 relative w-full h-full overflow-auto ${state.editMode ? 'edit-grid-bg' : ''}">
           ${items.length === 0 ? `
             <div class="flex flex-col items-center justify-center h-full text-center p-6 text-zinc-500 text-sm">
@@ -320,27 +313,17 @@
           `}
         </main>
 
-        <!-- Multi-Select Action Bar -->
         ${state.selectMode && state.selectedIds.length > 0 ? `
           <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900/95 border border-zinc-700 backdrop-blur-xl px-6 py-3.5 rounded-2xl shadow-2xl z-40 flex items-center gap-5">
             <span class="text-xs font-bold text-zinc-300">${state.selectedIds.length} Selected</span>
             <div class="h-4 w-px bg-zinc-800"></div>
-            <button onclick="bulkCopy()" class="flex items-center gap-1.5 text-xs text-zinc-200 hover:text-amber-400 font-bold">
-              <i data-lucide="copy" class="w-4 h-4"></i> Copy
-            </button>
-            <button onclick="bulkMove()" class="flex items-center gap-1.5 text-xs text-zinc-200 hover:text-amber-400 font-bold">
-              <i data-lucide="folder-output" class="w-4 h-4"></i> Move
-            </button>
-            <button onclick="bulkDelete()" class="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 font-bold">
-              <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
-            </button>
+            <button onclick="bulkCopy()" class="flex items-center gap-1.5 text-xs text-zinc-200 hover:text-amber-400 font-bold"><i data-lucide="copy" class="w-4 h-4"></i> Copy</button>
+            <button onclick="bulkMove()" class="flex items-center gap-1.5 text-xs text-zinc-200 hover:text-amber-400 font-bold"><i data-lucide="folder-output" class="w-4 h-4"></i> Move</button>
+            <button onclick="bulkDelete()" class="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 font-bold"><i data-lucide="trash-2" class="w-4 h-4"></i> Delete</button>
           </div>
         ` : ''}
 
-        <!-- Upload Prompt Modal -->
         ${state.showUploadModal ? renderUploadModal() : ''}
-
-        <!-- Quick View Popup -->
         ${state.quickViewFileId ? renderQuickViewModal() : ''}
       `;
 
@@ -369,34 +352,13 @@
 
       if (folder) {
         return `
-          <div 
-            id="item-${item.id}"
-            data-id="${item.id}"
-            style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" 
-            class="absolute flex flex-col items-center cursor-pointer ${state.editMode ? 'touch-none' : ''}"
-            onclick="handleItemClick(event, '${item.id}', true)"
-          >
+          <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute flex flex-col items-center cursor-pointer ${state.editMode ? 'touch-none' : ''}" onclick="handleItemClick(event, '${item.id}', true)">
             <div class="folder-cube bg-gradient-to-b from-zinc-800 to-zinc-950 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-zinc-700/60'} flex flex-col items-center justify-center relative overflow-hidden group">
-              ${item.coverUrl ? `
-                <img src="${item.coverUrl}" class="w-full h-full object-cover pointer-events-none" />
-              ` : `
-                <i data-lucide="folder" class="w-10 h-10 text-amber-400 fill-amber-400/20 stroke-[1.5] pointer-events-none"></i>
-              `}
-
-              ${state.selectMode ? `
-                <div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">
-                  ${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}
-                </div>
-              ` : ''}
-
-              ${!state.selectMode ? `
-                <button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/50 hover:bg-black/90 rounded-full text-zinc-300 z-10">
-                  <i data-lucide="more-vertical" class="w-4 h-4"></i>
-                </button>
-              ` : ''}
+              ${item.coverUrl ? `<img src="${item.coverUrl}" class="w-full h-full object-cover pointer-events-none" />` : `<i data-lucide="folder" class="w-10 h-10 text-amber-400 fill-amber-400/20 stroke-[1.5] pointer-events-none"></i>`}
+              ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
+              ${!state.selectMode ? `<button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/50 hover:bg-black/90 rounded-full text-zinc-300 z-10"><i data-lucide="more-vertical" class="w-4 h-4"></i></button>` : ''}
             </div>
             <span class="text-[11px] font-medium text-zinc-300 max-w-full truncate text-center mt-1.5 pointer-events-none">${item.name}</span>
-
             ${state.editMode ? '<div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>' : ''}
             ${isMenuOpen ? renderContextMenu(item, true) : ''}
           </div>
@@ -408,42 +370,22 @@
         const icon = getFileIcon(type, item.name);
 
         return `
-          <div 
-            id="item-${item.id}"
-            data-id="${item.id}"
-            style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" 
-            class="absolute bg-zinc-900 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : state.editMode ? 'border-yellow-500/60 touch-none' : 'border-zinc-800'} rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg cursor-pointer"
-            onclick="handleItemClick(event, '${item.id}', false)"
-          >
+          <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute bg-zinc-900 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : state.editMode ? 'border-yellow-500/60 touch-none' : 'border-zinc-800'} rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg cursor-pointer" onclick="handleItemClick(event, '${item.id}', false)">
             <div class="flex-1 bg-zinc-950 relative overflow-hidden flex items-center justify-center">
-              ${isImage && imgSrc ? `
-                <img src="${imgSrc}" class="w-full h-full object-cover pointer-events-none" alt="${item.name}" />
-              ` : `
+              ${isImage && imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover pointer-events-none" alt="${item.name}" />` : `
                 <div class="flex flex-col items-center gap-1 text-zinc-400">
                   <i data-lucide="${icon}" class="w-8 h-8 text-amber-400 pointer-events-none"></i>
                   ${type.startsWith('video/') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Video</span>' : ''}
                   ${type.startsWith('audio/') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Audio</span>' : ''}
                   ${type === 'application/pdf' ? '<span class="text-[9px] uppercase font-bold tracking-wider text-red-400">PDF</span>' : ''}
-                  ${type.startsWith('text/') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-blue-400">TEXT</span>' : ''}
                 </div>
               `}
-
-              ${state.selectMode ? `
-                <div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">
-                  ${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}
-                </div>
-              ` : ''}
-              
-              ${!state.selectMode ? `
-                <button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/60 hover:bg-black/90 rounded-full text-zinc-200 backdrop-blur-sm z-10">
-                  <i data-lucide="more-vertical" class="w-4 h-4"></i>
-                </button>
-              ` : ''}
+              ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
+              ${!state.selectMode ? `<button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/60 hover:bg-black/90 rounded-full text-zinc-200 backdrop-blur-sm z-10"><i data-lucide="more-vertical" class="w-4 h-4"></i></button>` : ''}
             </div>
             <div class="p-1.5 bg-zinc-900 flex items-center justify-between border-t border-zinc-800 pointer-events-none">
               <span class="text-[10px] font-medium text-zinc-200 truncate flex-1">${item.name}</span>
             </div>
-
             ${state.editMode ? '<div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>' : ''}
             ${isMenuOpen ? renderContextMenu(item, false) : ''}
           </div>
@@ -451,43 +393,25 @@
       }
     }
 
-    // --- CONTEXT MENU OPTIONS (Preserving all required options) ---
     function renderContextMenu(item, isFolderItem) {
       return `
         <div onclick="event.stopPropagation()" class="absolute left-full top-0 ml-2 w-48 bg-zinc-900/95 border border-zinc-700/80 rounded-xl shadow-2xl backdrop-blur-md z-50 overflow-hidden text-xs py-1">
           ${isFolderItem ? `
-            <button onclick="triggerFolderCover('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-              <i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400"></i> Change Cover
-            </button>
+            <button onclick="triggerFolderCover('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400"></i> Change Cover</button>
           ` : `
-            <button onclick="openQuickView('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-              <i data-lucide="eye" class="w-3.5 h-3.5 text-zinc-400"></i> Open / Preview
-            </button>
-            <button onclick="shareFile('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-              <i data-lucide="share" class="w-3.5 h-3.5 text-zinc-400"></i> Share (iOS)
-            </button>
-            <button onclick="triggerChangeImage('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-              <i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400"></i> Change Image
-            </button>
+            <button onclick="openQuickView('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="eye" class="w-3.5 h-3.5 text-zinc-400"></i> Open / Preview</button>
+            <button onclick="shareFile('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="share" class="w-3.5 h-3.5 text-zinc-400"></i> Share (iOS)</button>
+            <button onclick="triggerChangeImage('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400"></i> Change Image</button>
           `}
-          <button onclick="renameItem('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-            <i data-lucide="edit-3" class="w-3.5 h-3.5 text-zinc-400"></i> Rename
-          </button>
-          <button onclick="moveToFolder('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-            <i data-lucide="folder-output" class="w-3.5 h-3.5 text-zinc-400"></i> Move to folder
-          </button>
-          <button onclick="snapToOriginalShape('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400"></i> Snap to original shape
-          </button>
+          <button onclick="renameItem('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="edit-3" class="w-3.5 h-3.5 text-zinc-400"></i> Rename</button>
+          <button onclick="moveToFolder('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="folder-output" class="w-3.5 h-3.5 text-zinc-400"></i> Move to folder</button>
+          <button onclick="snapToOriginalShape('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400"></i> Snap to original shape</button>
           <div class="h-px bg-zinc-800 my-1"></div>
-          <button onclick="deleteItemConfirm('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium">
-            <i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400"></i> Delete with confirmation
-          </button>
+          <button onclick="deleteItemConfirm('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400"></i> Delete with confirmation</button>
         </div>
       `;
     }
 
-    // --- UPLOAD MODAL ---
     function renderUploadModal() {
       return `
         <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" onclick="closeUploadModal()">
@@ -495,15 +419,9 @@
             <h3 class="text-lg font-bold text-white">Add Item</h3>
             <p class="text-xs text-zinc-400">Where do you want to upload your files from?</p>
             <div class="flex flex-col gap-2.5 mt-2">
-              <button onclick="document.getElementById('file-input').click(); closeUploadModal();" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2">
-                <i data-lucide="file" class="w-4 h-4 text-amber-400"></i> Files App
-              </button>
-              <button onclick="document.getElementById('photo-input').click(); closeUploadModal();" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2">
-                <i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Photos, Audio & Videos
-              </button>
-              <button onclick="openNewFolderModal(); closeUploadModal();" class="w-full py-3 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2 border border-zinc-700/50">
-                <i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i> New Folder
-              </button>
+              <button onclick="document.getElementById('file-input').click(); closeUploadModal();" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2"><i data-lucide="file" class="w-4 h-4 text-amber-400"></i> Files App</button>
+              <button onclick="document.getElementById('photo-input').click(); closeUploadModal();" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2"><i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Photos, Audio & Videos</button>
+              <button onclick="openNewFolderModal(); closeUploadModal();" class="w-full py-3 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2 border border-zinc-700/50"><i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i> New Folder</button>
             </div>
             <button onclick="closeUploadModal()" class="text-xs text-zinc-500 hover:text-zinc-300 mt-2 font-medium">Cancel</button>
           </div>
@@ -511,151 +429,73 @@
       `;
     }
 
-    // --- QUICK VIEW & MEDIA PLAYER MODAL ---
     function renderQuickViewContent(file) {
       const type = file.fileType || '';
       const mediaUrl = file.blobUrl || file.dataUrl;
       
-      if (type.startsWith('image/')) {
-        return `<img src="${file.dataUrl}" class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl" />`;
-      }
-      
-      if (type.startsWith('video/')) {
-        return `
-          <video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black" src="${mediaUrl}">
-            Your browser does not support playing this video.
-          </video>
-        `;
-      }
-
+      if (type.startsWith('image/')) return `<img src="${file.dataUrl}" class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl" />`;
+      if (type.startsWith('video/')) return `<video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black" src="${mediaUrl}"></video>`;
       if (type.startsWith('audio/')) {
         return `
           <div class="flex flex-col items-center gap-6 p-8 bg-zinc-900 border border-zinc-800 rounded-3xl max-w-sm w-full shadow-2xl text-center">
-            <div class="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-400">
-              <i data-lucide="music" class="w-10 h-10"></i>
-            </div>
+            <div class="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-400"><i data-lucide="music" class="w-10 h-10"></i></div>
             <span class="text-sm font-semibold text-zinc-200 max-w-full truncate">${file.name}</span>
-            <audio controls playsinline autoplay class="w-full" src="${mediaUrl}">
-              Your browser does not support audio playback.
-            </audio>
+            <audio controls playsinline autoplay class="w-full" src="${mediaUrl}"></audio>
           </div>
         `;
       }
-
-      if (type === 'application/pdf' || file.name.endsWith('.pdf')) {
-        return `
-          <iframe src="${file.dataUrl}" class="w-full h-full rounded-2xl border border-zinc-800 bg-white"></iframe>
-        `;
-      }
-
-      if (type.startsWith('text/') || file.name.endsWith('.txt')) {
-        return `
-          <div class="w-full h-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 overflow-auto text-xs font-mono text-zinc-300 whitespace-pre-wrap select-text">
-            ${file.textContent || 'No text content available.'}
-          </div>
-        `;
-      }
-
-      return `
-        <div class="flex flex-col items-center gap-3 text-zinc-500">
-          <i data-lucide="file-text" class="w-16 h-16"></i>
-          <span class="text-xs text-zinc-400">${file.name}</span>
-          <span class="text-[10px] text-zinc-600">Preview not directly available. Use Share to open in native apps.</span>
-        </div>
-      `;
+      if (type === 'application/pdf' || file.name.endsWith('.pdf')) return `<iframe src="${file.dataUrl}" class="w-full h-full rounded-2xl border border-zinc-800 bg-white"></iframe>`;
+      if (type.startsWith('text/') || file.name.endsWith('.txt')) return `<div class="w-full h-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 overflow-auto text-xs font-mono text-zinc-300 whitespace-pre-wrap select-text">${file.textContent || ''}</div>`;
+      return `<div class="flex flex-col items-center gap-3 text-zinc-500"><i data-lucide="file-text" class="w-16 h-16"></i><span class="text-xs text-zinc-400">${file.name}</span></div>`;
     }
 
     function renderQuickViewModal() {
       const file = state.files.find(f => f.id === state.quickViewFileId);
       if (!file) return '';
-
       return `
         <div class="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col justify-between p-4" onclick="closeQuickView()">
           <div class="flex items-center justify-between text-zinc-300 pt-2 px-2" onclick="event.stopPropagation()">
             <span class="text-sm font-semibold truncate max-w-[200px]">${file.name}</span>
-            <button onclick="closeQuickView()" class="p-2 bg-zinc-900 border border-zinc-800 rounded-full hover:text-white">
-              <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
+            <button onclick="closeQuickView()" class="p-2 bg-zinc-900 border border-zinc-800 rounded-full hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
           </div>
-
-          <div class="flex-1 flex items-center justify-center overflow-hidden my-4" onclick="event.stopPropagation()">
-            ${renderQuickViewContent(file)}
-          </div>
-
-          <!-- Quick View Action Toolbar -->
+          <div class="flex-1 flex items-center justify-center overflow-hidden my-4" onclick="event.stopPropagation()">${renderQuickViewContent(file)}</div>
           <div class="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 flex items-center justify-around text-xs font-semibold text-zinc-200" onclick="event.stopPropagation()">
-            <button onclick="copySingleFile('${file.id}')" class="flex flex-col items-center gap-1 hover:text-amber-400">
-              <i data-lucide="copy" class="w-5 h-5"></i> Copy
-            </button>
-            <button onclick="moveToFolder('${file.id}', false); closeQuickView();" class="flex flex-col items-center gap-1 hover:text-amber-400">
-              <i data-lucide="folder-output" class="w-5 h-5"></i> Move
-            </button>
-            <button onclick="shareFile('${file.id}')" class="flex flex-col items-center gap-1 hover:text-amber-400">
-              <i data-lucide="share" class="w-5 h-5"></i> Share
-            </button>
-            <button onclick="deleteItemConfirm('${file.id}', false); closeQuickView();" class="flex flex-col items-center gap-1 text-red-400 hover:text-red-300">
-              <i data-lucide="trash-2" class="w-5 h-5"></i> Delete
-            </button>
+            <button onclick="copySingleFile('${file.id}')" class="flex flex-col items-center gap-1 hover:text-amber-400"><i data-lucide="copy" class="w-5 h-5"></i> Copy</button>
+            <button onclick="moveToFolder('${file.id}', false); closeQuickView();" class="flex flex-col items-center gap-1 hover:text-amber-400"><i data-lucide="folder-output" class="w-5 h-5"></i> Move</button>
+            <button onclick="shareFile('${file.id}')" class="flex flex-col items-center gap-1 hover:text-amber-400"><i data-lucide="share" class="w-5 h-5"></i> Share</button>
+            <button onclick="deleteItemConfirm('${file.id}', false); closeQuickView();" class="flex flex-col items-center gap-1 text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-5 h-5"></i> Delete</button>
           </div>
         </div>
       `;
     }
 
-    // --- SELECTION & CLICK HANDLERS ---
-    function toggleSelectMode() {
-      state.selectMode = !state.selectMode;
-      state.selectedIds = [];
-      closeMenu();
-      render();
-    }
-
+    function toggleSelectMode() { state.selectMode = !state.selectMode; state.selectedIds = []; closeMenu(); render(); }
     function toggleSelectAll() {
-      const childrenFolders = state.folders.filter(f => f.parentId === state.currentFolderId && f.id !== 'root');
-      const childrenFiles = state.files.filter(f => f.parentId === state.currentFolderId);
-      const items = [...childrenFolders, ...childrenFiles];
-
+      const items = [...state.folders.filter(f => f.parentId === state.currentFolderId && f.id !== 'root'), ...state.files.filter(f => f.parentId === state.currentFolderId)];
       const allSelected = items.length > 0 && items.every(item => state.selectedIds.includes(item.id));
-
-      if (allSelected) {
-        state.selectedIds = [];
-      } else {
-        state.selectedIds = items.map(item => item.id);
-      }
+      state.selectedIds = allSelected ? [] : items.map(item => item.id);
       render();
     }
 
     function handleItemClick(e, id, isFolderItem) {
       if (state.selectMode) {
-        if (state.selectedIds.includes(id)) {
-          state.selectedIds = state.selectedIds.filter(i => i !== id);
-        } else {
-          state.selectedIds.push(id);
-        }
+        state.selectedIds = state.selectedIds.includes(id) ? state.selectedIds.filter(i => i !== id) : [...state.selectedIds, id];
         render();
         return;
       }
-
       if (state.editMode) return;
-
-      if (isFolderItem) {
-        navigateTo(id);
-      } else {
-        openQuickView(id);
-      }
+      if (isFolderItem) navigateTo(id); else openQuickView(id);
     }
 
     function openUploadModal() { state.showUploadModal = true; render(); }
     function closeUploadModal() { state.showUploadModal = false; render(); }
-
     function openQuickView(id) { state.quickViewFileId = id; closeMenu(); render(); }
     function closeQuickView() { state.quickViewFileId = null; render(); }
-
     function navigateTo(id) { state.currentFolderId = id; closeMenu(); render(); }
     function toggleEditMode() { state.editMode = !state.editMode; closeMenu(); render(); }
     function toggleMenu(id) { state.activeMenuId = state.activeMenuId === id ? null : id; render(); }
     function closeMenu() { if (state.activeMenuId) { state.activeMenuId = null; render(); } }
 
-    // --- BULK OPERATIONS ---
     async function bulkDelete() {
       if (!confirm(`Are you sure you want to delete ${state.selectedIds.length} items?`)) return;
       for (let id of state.selectedIds) {
@@ -670,8 +510,7 @@
 
     async function bulkMove() {
       const targetFolders = state.folders.filter(f => !state.selectedIds.includes(f.id));
-      let promptText = "Enter destination folder ID or 'root':\n" + targetFolders.map(f => `- ${f.name} (ID: ${f.id})`).join('\n');
-      const targetId = prompt(promptText, 'root');
+      const targetId = prompt("Enter destination folder ID or 'root':\n" + targetFolders.map(f => `- ${f.name} (${f.id})`).join('\n'), 'root');
       if (targetId) {
         const actualParent = targetId === 'root' ? null : targetId;
         for (let id of state.selectedIds) {
@@ -690,12 +529,8 @@
         let file = state.files.find(f => f.id === id);
         if (file) {
           const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
-          delete newFile.x;
-          delete newFile.y;
-          delete newFile.blobUrl;
-          if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) {
-            await getOrCreateBlobUrl(newFile);
-          }
+          delete newFile.x; delete newFile.y; delete newFile.blobUrl;
+          if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) await getOrCreateBlobUrl(newFile);
           state.files.push(newFile);
           await saveFile(newFile);
         }
@@ -708,12 +543,8 @@
       let file = state.files.find(f => f.id === id);
       if (file) {
         const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
-        delete newFile.x;
-        delete newFile.y;
-        delete newFile.blobUrl;
-        if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) {
-          await getOrCreateBlobUrl(newFile);
-        }
+        delete newFile.x; delete newFile.y; delete newFile.blobUrl;
+        if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) await getOrCreateBlobUrl(newFile);
         state.files.push(newFile);
         await saveFile(newFile);
         alert('File copied successfully!');
@@ -722,64 +553,35 @@
       }
     }
 
-    // iOS SHARE SHEET API INTEGRATION
     async function shareFile(id) {
       const file = state.files.find(f => f.id === id);
       if (!file) return;
-
       if (navigator.canShare && file.dataUrl) {
         try {
           const res = await fetch(file.dataUrl);
           const blob = await res.blob();
           const nativeFile = new File([blob], file.name, { type: file.fileType || blob.type });
-
           if (navigator.canShare({ files: [nativeFile] })) {
-            await navigator.share({
-              files: [nativeFile],
-              title: file.name
-            });
+            await navigator.share({ files: [nativeFile], title: file.name });
             return;
           }
-        } catch (e) {
-          console.error("Native file share fallback triggered:", e);
-        }
+        } catch (e) {}
       }
-
-      if (navigator.share) {
-        try {
-          await navigator.share({ title: file.name, text: file.name, url: file.dataUrl });
-        } catch (e) { console.error(e); }
-      } else {
-        alert('Sharing is not supported on this browser/device.');
-      }
+      if (navigator.share) await navigator.share({ title: file.name, text: file.name, url: file.dataUrl });
+      else alert('Sharing is not supported on this device.');
     }
 
-    // --- COVERS & IMAGES ---
-    function triggerFolderCover(id) {
-      state.targetFolderCoverId = id;
-      document.getElementById('folder-cover-input').click();
-      closeMenu();
-    }
-
+    function triggerFolderCover(id) { state.targetFolderCoverId = id; document.getElementById('folder-cover-input').click(); closeMenu(); }
     document.getElementById('folder-cover-input').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (file && state.targetFolderCoverId) {
         const base64 = await fileToBase64(file);
         const folder = state.folders.find(f => f.id === state.targetFolderCoverId);
-        if (folder) {
-          folder.coverUrl = base64;
-          await saveFolder(folder);
-          render();
-        }
+        if (folder) { folder.coverUrl = base64; await saveFolder(folder); render(); }
       }
     });
 
-    function triggerChangeImage(id) {
-      state.targetChangeImageId = id;
-      document.getElementById('change-image-input').click();
-      closeMenu();
-    }
-
+    function triggerChangeImage(id) { state.targetChangeImageId = id; document.getElementById('change-image-input').click(); closeMenu(); }
     document.getElementById('change-image-input').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (file && state.targetChangeImageId) {
@@ -787,10 +589,7 @@
         const item = state.files.find(f => f.id === state.targetChangeImageId);
         if (item) {
           item.dataUrl = base64;
-          if (item.fileType?.startsWith('video/') || item.fileType?.startsWith('audio/')) {
-            item.blobUrl = '';
-            await getOrCreateBlobUrl(item);
-          }
+          if (item.fileType?.startsWith('video/') || item.fileType?.startsWith('audio/')) { item.blobUrl = ''; await getOrCreateBlobUrl(item); }
           await saveFile(item);
           render();
         }
@@ -804,26 +603,21 @@
         if (newName) {
           item.name = newName;
           if (isFolderItem) await saveFolder(item); else await saveFile(item);
-          closeMenu();
-          render();
+          closeMenu(); render();
         }
       }
     }
 
     async function moveToFolder(id, isFolderItem) {
       const targetFolders = state.folders.filter(f => f.id !== id);
-      let promptText = "Enter destination folder ID or 'root':\n" + targetFolders.map(f => `- ${f.name} (ID: ${f.id})`).join('\n');
-      const targetId = prompt(promptText, 'root');
+      const targetId = prompt("Enter destination folder ID or 'root':\n" + targetFolders.map(f => `- ${f.name} (${f.id})`).join('\n'), 'root');
       if (targetId) {
         const actualParent = targetId === 'root' ? null : targetId;
         const item = isFolderItem ? state.folders.find(f => f.id === id) : state.files.find(f => f.id === id);
         if (item) {
-          item.parentId = actualParent;
-          delete item.x;
-          delete item.y;
+          item.parentId = actualParent; delete item.x; delete item.y;
           if (isFolderItem) await saveFolder(item); else await saveFile(item);
-          closeMenu();
-          render();
+          closeMenu(); render();
         }
       }
     }
@@ -834,35 +628,25 @@
         item.width = isFolder(item) ? 96 : 112;
         item.height = isFolder(item) ? 96 : 128;
         if (isFolder(item)) await saveFolder(item); else await saveFile(item);
-        closeMenu();
-        render();
+        closeMenu(); render();
       }
     }
 
     async function deleteItemConfirm(id, isFolderItem) {
       if (!confirm('Are you sure you want to delete this item?')) return;
-      if (isFolderItem) {
-        state.folders = state.folders.filter(f => f.id !== id);
-        await deleteFromDB('folders', id);
-      } else {
-        state.files = state.files.filter(f => f.id !== id);
-        await deleteFromDB('files', id);
-      }
-      closeMenu();
-      render();
+      if (isFolderItem) { state.folders = state.folders.filter(f => f.id !== id); await deleteFromDB('folders', id); }
+      else { state.files = state.files.filter(f => f.id !== id); await deleteFromDB('files', id); }
+      closeMenu(); render();
     }
 
     function openNewFolderModal() {
       const name = prompt('Folder Name:', 'New Folder');
       if (name) {
         const folder = { id: uid(), name, parentId: state.currentFolderId, width: 96, height: 96 };
-        state.folders.push(folder);
-        saveFolder(folder);
-        render();
+        state.folders.push(folder); saveFolder(folder); render();
       }
     }
 
-    // --- FILE CONVERSION & PARSING ---
     function fileToBase64(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -884,19 +668,7 @@
     function getMimeType(file) {
       if (file.type && file.type !== '') return file.type;
       const ext = file.name.split('.').pop().toLowerCase();
-      const mimeMap = {
-        'mp3': 'audio/mpeg',
-        'm4a': 'audio/mp4',
-        'aac': 'audio/aac',
-        'wav': 'audio/wav',
-        'ogg': 'audio/ogg',
-        'flac': 'audio/flac',
-        'mp4': 'video/mp4',
-        'mov': 'video/quicktime',
-        'webm': 'video/webm',
-        'pdf': 'application/pdf',
-        'txt': 'text/plain'
-      };
+      const mimeMap = {'mp3': 'audio/mpeg', 'm4a': 'audio/mp4', 'mp4': 'video/mp4', 'mov': 'video/quicktime', 'pdf': 'application/pdf', 'txt': 'text/plain'};
       return mimeMap[ext] || 'application/octet-stream';
     }
 
@@ -907,22 +679,9 @@
         let inferredType = getMimeType(file);
         let blobUrl = '';
 
-        if (inferredType.startsWith('video/') || inferredType.startsWith('audio/')) {
-          blobUrl = URL.createObjectURL(file);
-        } else if (inferredType.startsWith('text/') || file.name.endsWith('.txt')) {
-          try {
-            textContent = await fileToText(file);
-          } catch (e) { console.error(e); }
-        }
-
-        if (!blobUrl && dataUrl) {
-          try {
-            const res = await fetch(dataUrl);
-            const blob = await res.blob();
-            blobUrl = URL.createObjectURL(blob);
-          } catch (e) {
-            blobUrl = dataUrl;
-          }
+        if (inferredType.startsWith('video/') || inferredType.startsWith('audio/')) blobUrl = URL.createObjectURL(file);
+        else if (inferredType.startsWith('text/') || file.name.endsWith('.txt')) {
+          try { textContent = await fileToText(file); } catch (e) {}
         }
 
         const item = {
@@ -947,84 +706,52 @@
     document.getElementById('file-input').addEventListener('change', (e) => handleFileImport(e.target.files));
     document.getElementById('photo-input').addEventListener('change', (e) => handleFileImport(e.target.files));
 
-    // --- SMOOTH DRAG & RESIZE LISTENERS ---
     function attachDragAndResizeListeners() {
       if (!state.editMode) return;
-
       const elements = document.querySelectorAll('[data-id]');
       elements.forEach(el => {
-        let activeDrag = false;
-        let activeResize = false;
+        let activeDrag = false, activeResize = false;
         let startX, startY, origX, origY, origW, origH;
-
         const resizeHandle = el.querySelector('.resize-handle');
 
         const onStart = (e) => {
           const touch = e.touches ? e.touches[0] : e;
-          startX = touch.clientX;
-          startY = touch.clientY;
-
-          if (e.target === resizeHandle || resizeHandle.contains(e.target)) {
-            activeResize = true;
-            origW = el.offsetWidth;
-            origH = el.offsetHeight;
+          startX = touch.clientX; startY = touch.clientY;
+          if (e.target === resizeHandle || resizeHandle?.contains(e.target)) {
+            activeResize = true; origW = el.offsetWidth; origH = el.offsetHeight;
           } else {
-            activeDrag = true;
-            origX = parseInt(el.style.left) || 0;
-            origY = parseInt(el.style.top) || 0;
+            activeDrag = true; origX = parseInt(el.style.left) || 0; origY = parseInt(el.style.top) || 0;
           }
         };
 
         const onMove = (e) => {
           if (!activeDrag && !activeResize) return;
           const touch = e.touches ? e.touches[0] : e;
-          const dx = touch.clientX - startX;
-          const dy = touch.clientY - startY;
-
+          const dx = touch.clientX - startX, dy = touch.clientY - startY;
           if (activeDrag) {
-            let rawX = Math.max(8, origX + dx);
-            let rawY = Math.max(8, origY + dy);
-            let snappedX = Math.round(rawX / CONFIG.GRID_SIZE) * CONFIG.GRID_SIZE;
-            let snappedY = Math.round(rawY / CONFIG.GRID_SIZE) * CONFIG.GRID_SIZE;
-            el.style.left = `${snappedX}px`;
-            el.style.top = `${snappedY}px`;
+            el.style.left = `${Math.round(Math.max(8, origX + dx) / CONFIG.GRID_SIZE) * CONFIG.GRID_SIZE}px`;
+            el.style.top = `${Math.round(Math.max(8, origY + dy) / CONFIG.GRID_SIZE) * CONFIG.GRID_SIZE}px`;
           } else if (activeResize) {
-            let newW = Math.max(64, origW + dx);
-            let newH = Math.max(64, origH + dy);
-            el.style.width = `${newW}px`;
-            el.style.height = `${newH}px`;
+            el.style.width = `${Math.max(64, origW + dx)}px`;
+            el.style.height = `${Math.max(64, origH + dy)}px`;
           }
         };
 
         const onEnd = () => {
           if (!activeDrag && !activeResize) return;
-          const id = el.getAttribute('data-id');
-          let target = state.folders.find(f => f.id === id) || state.files.find(f => f.id === id);
-
+          const target = state.folders.find(f => f.id === el.getAttribute('data-id')) || state.files.find(f => f.id === el.getAttribute('data-id'));
           if (target) {
-            if (activeDrag) {
-              target.x = parseInt(el.style.left);
-              target.y = parseInt(el.style.top);
-            }
-            if (activeResize) {
-              target.width = parseInt(el.style.width);
-              target.height = parseInt(el.style.height);
-            }
+            if (activeDrag) { target.x = parseInt(el.style.left); target.y = parseInt(el.style.top); }
+            if (activeResize) { target.width = parseInt(el.style.width); target.height = parseInt(el.style.height); }
             if (isFolder(target)) saveFolder(target); else saveFile(target);
           }
-
-          activeDrag = false;
-          activeResize = false;
-          window.removeEventListener('mousemove', onMove);
-          window.removeEventListener('mouseup', onEnd);
-          window.removeEventListener('touchmove', onMove);
-          window.removeEventListener('touchend', onEnd);
+          activeDrag = false; activeResize = false;
+          window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onEnd);
         };
 
         el.addEventListener('mousedown', onStart);
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onEnd);
-
         el.addEventListener('touchstart', onStart, { passive: true });
         window.addEventListener('touchmove', onMove, { passive: true });
         window.addEventListener('touchend', onEnd);
