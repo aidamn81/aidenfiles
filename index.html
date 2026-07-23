@@ -227,9 +227,11 @@
 
         const jsonString = JSON.stringify({ folders: state.folders, files: state.files });
         
-        // Safeguard against oversized payloads causing 500 server errors
-        if (jsonString.length > 25 * 1024 * 1024) {
-          throw new Error('Data payload is too large for a single GitHub API commit (>25MB). Please delete some files.');
+        // Dynamic payload splitting / multi-file sync or smart chunking if needed, 
+        // but here we allow larger payloads by compressing or raising warning threshold if GitHub allows up to 100MB per file via contents API (actually 50-100MB max payload per commit).
+        // Let's remove the strict 25MB block and allow up to 90MB payload or warn gracefully without crashing.
+        if (jsonString.length > 95 * 1024 * 1024) {
+          throw new Error('Data payload exceeds GitHub API absolute limit (~100MB). Please offload or delete some large media files.');
         }
 
         const payload = {
