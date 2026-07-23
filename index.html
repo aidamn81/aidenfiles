@@ -230,7 +230,14 @@
           }
         }
 
-        const jsonString = JSON.stringify({ folders: state.folders, files: state.files });
+        // Clean files array before serializing to prevent payload bloat / status 500 server crash
+        const sanitizedFiles = state.files.map(file => {
+          const copy = { ...file };
+          delete copy.blobUrl;
+          return copy;
+        });
+
+        const jsonString = JSON.stringify({ folders: state.folders, files: sanitizedFiles });
         
         const payload = {
           message: 'Sync Aiden Files Data',
@@ -238,7 +245,15 @@
           ...(sha && { sha })
         };
 
-        const putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
+        let putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
+        
+        // Retry logic specifically for intermittent GitHub 500 errors
+        if (putRes.status === 500) {
+          console.warn('GitHub returned 500. Retrying upload once...');
+          await new Promise(r => setTimeout(r, 2000));
+          putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
+        }
+
         if (putRes.ok) {
           alert('Sync Successful! Cloud backup updated.');
         } else {
