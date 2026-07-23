@@ -165,7 +165,13 @@
       }
     }
 
-    // --- GITHUB SYNC (With auto token prompt & debugging fallback) ---
+    // --- TOKEN MANAGEMENT & GITHUB SYNC ---
+    function resetToken() {
+      localStorage.removeItem('af_gh_token');
+      state.ghToken = '';
+      syncWithGitHub();
+    }
+
     async function syncWithGitHub(forcePull = false) {
       if (!state.ghToken) {
         const token = prompt('Enter your GitHub Personal Access Token (classic token with repo scope or fine-grained token with Contents read/write):');
@@ -179,8 +185,14 @@
 
       try {
         const url = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/${CONFIG.ghPath}`;
+        
+        // Support both old classic tokens (Bearer/token) and modern fine-grained tokens (Bearer)
+        const authHeader = state.ghToken.startsWith('ghp_') || state.ghToken.startsWith('gho_') 
+          ? `token ${state.ghToken}` 
+          : `Bearer ${state.ghToken}`;
+
         const headers = {
-          'Authorization': `token ${state.ghToken}`,
+          'Authorization': authHeader,
           'Accept': 'application/vnd.github.v3+json',
           'X-GitHub-Api-Version': '2022-11-28'
         };
@@ -191,7 +203,7 @@
         if (getRes.status === 401 || getRes.status === 403) {
           localStorage.removeItem('af_gh_token');
           state.ghToken = '';
-          throw new Error('Authentication or Permission denied (401/403). Please check that your Personal Access Token has repo / contents permission and try again.');
+          throw new Error('Authentication or Permission denied (401/403). Your token may be invalid, expired, or lacking repository scope permissions.');
         }
 
         if (getRes.ok) {
@@ -259,11 +271,16 @@
         <header class="shrink-0 z-30 bg-black/95 backdrop-blur-lg border-b border-zinc-900 px-4 py-3 flex flex-col gap-3">
           <div class="flex items-center justify-between gap-2 flex-wrap">
             
-            <!-- Left Sync Button -->
-            <button onclick="syncWithGitHub()" class="px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl text-xs font-bold text-zinc-300 flex items-center gap-2 shadow-sm">
-              <i data-lucide="${state.isSyncing ? 'refresh-cw' : 'cloud'}" class="w-4 h-4 ${state.isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-400'}"></i>
-              <span class="hidden sm:inline">${state.isSyncing ? 'Syncing...' : 'Sync'}</span>
-            </button>
+            <!-- Left Sync & Token Reset Buttons -->
+            <div class="flex items-center gap-1.5">
+              <button onclick="syncWithGitHub()" class="px-3 py-2.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl text-xs font-bold text-zinc-300 flex items-center gap-2 shadow-sm">
+                <i data-lucide="${state.isSyncing ? 'refresh-cw' : 'cloud'}" class="w-4 h-4 ${state.isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-400'}"></i>
+                <span class="hidden sm:inline">${state.isSyncing ? 'Syncing...' : 'Sync'}</span>
+              </button>
+              <button onclick="resetToken()" title="Reset saved GitHub token" class="p-2.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl text-zinc-400 hover:text-zinc-200">
+                <i data-lucide="key" class="w-4 h-4"></i>
+              </button>
+            </div>
 
             <!-- Centered Larger Buttons: Home & Add -->
             <div class="flex items-center justify-center gap-3 flex-1">
