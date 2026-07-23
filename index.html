@@ -57,7 +57,7 @@
     };
 
     let state = {
-      editMode: false,
+      editMode: true, // Always keep in edit mode as requested
       selectMode: false,
       selectedIds: [],
       currentFolderId: null,
@@ -263,7 +263,7 @@
       const allChildrenSelected = items.length > 0 && items.every(item => state.selectedIds.includes(item.id));
 
       app.innerHTML = `
-        <header class="shrink-0 z-30 bg-black/95 backdrop-blur-lg border-b border-zinc-900 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+        <header class="shrink-0 z-35 bg-black/95 backdrop-blur-lg border-b border-zinc-900 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
           <div class="flex items-center gap-1.5 shrink-0">
             <button onclick="syncWithGitHub()" class="px-2.5 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-bold text-zinc-300 flex items-center gap-1.5 shadow-sm">
               <i data-lucide="${state.isSyncing ? 'refresh-cw' : 'cloud'}" class="w-3.5 h-3.5 ${state.isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-400'}"></i>
@@ -303,12 +303,12 @@
               ${state.selectMode ? 'Cancel' : 'Select'}
             </button>
             <button onclick="toggleEditMode()" class="px-3 py-2 rounded-xl text-xs font-bold border ${state.editMode ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}">
-              ${state.editMode ? 'Done' : 'Edit'}
+              ${state.editMode ? 'Edit Mode On' : 'Edit'}
             </button>
           </div>
         </header>
 
-        <main onclick="closeMenu()" class="flex-1 relative w-full h-full overflow-auto ${state.editMode ? 'edit-grid-bg' : ''}">
+        <main onclick="closeMenu()" class="flex-1 relative w-full h-full overflow-auto edit-grid-bg">
           ${items.length === 0 ? `
             <div class="flex flex-col items-center justify-center h-full text-center p-6 text-zinc-500 text-sm gap-3">
               <span>Folder is empty</span>
@@ -317,7 +317,7 @@
               </button>
             </div>
           ` : `
-            <div class="relative min-w-[800px] min-h-[800px] p-4">
+            <div class="relative min-w-[1200px] min-h-[1200px] p-4">
               ${items.map((item, index) => renderItem(item, index)).join('')}
             </div>
           `}
@@ -363,14 +363,14 @@
 
       if (folder) {
         return `
-          <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute flex flex-col items-center cursor-pointer ${state.editMode ? 'touch-none' : ''}" onclick="handleItemClick(event, '${item.id}', true)">
+          <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute flex flex-col items-center cursor-pointer touch-none" onclick="handleItemClick(event, '${item.id}', true)">
             <div class="folder-cube bg-gradient-to-b from-zinc-800 to-zinc-950 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-zinc-700/60'} flex flex-col items-center justify-center relative overflow-hidden group">
               ${item.coverUrl ? `<img src="${item.coverUrl}" class="w-full h-full object-cover rounded-[20px] pointer-events-none" />` : `<i data-lucide="folder" class="w-10 h-10 text-amber-400 fill-amber-400/20 stroke-[1.5] pointer-events-none"></i>`}
               ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
               <button type="button" onclick="toggleMenu(event, '${item.id}')" class="absolute top-1.5 right-1.5 p-2 bg-black/70 hover:bg-black rounded-full text-zinc-200 z-45 cursor-pointer shadow-md"><i data-lucide="more-vertical" class="w-4 h-4 pointer-events-none"></i></button>
             </div>
             <span class="text-[11px] font-medium text-zinc-300 max-w-full truncate text-center mt-1.5 pointer-events-none">${item.name}</span>
-            ${state.editMode ? '<div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>' : ''}
+            <div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>
             ${isMenuOpen ? renderContextMenu(item, true) : ''}
           </div>
         `;
@@ -381,7 +381,7 @@
         const icon = getFileIcon(type, item.name);
 
         return `
-          <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute bg-zinc-900 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : state.editMode ? 'border-yellow-500/60 touch-none' : 'border-zinc-800'} rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg cursor-pointer" onclick="handleItemClick(event, '${item.id}', false)">
+          <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute bg-zinc-900 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-yellow-500/60 touch-none'} rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg cursor-pointer" onclick="handleItemClick(event, '${item.id}', false)">
             <div class="flex-1 bg-zinc-950 relative overflow-hidden flex items-center justify-center rounded-t-2xl">
               ${isImage && imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover rounded-xl pointer-events-none" alt="${item.name}" />` : `
                 <div class="flex flex-col items-center gap-1 text-zinc-400">
@@ -398,7 +398,7 @@
             <div class="p-1.5 bg-zinc-900 flex items-center justify-between border-t border-zinc-800 rounded-b-2xl pointer-events-none">
               <span class="text-[10px] font-medium text-zinc-200 truncate flex-1">${item.name}</span>
             </div>
-            ${state.editMode ? '<div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>' : ''}
+            <div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>
             ${isMenuOpen ? renderContextMenu(item, false) : ''}
           </div>
         `;
@@ -501,7 +501,6 @@
         render();
         return;
       }
-      if (state.editMode) return;
       if (isFolderItem) navigateTo(id); else openQuickView(id);
     }
 
@@ -510,7 +509,7 @@
     function openQuickView(id) { state.quickViewFileId = id; closeMenu(); render(); }
     function closeQuickView() { state.quickViewFileId = null; render(); }
     function navigateTo(id) { state.currentFolderId = id; closeMenu(); render(); }
-    function toggleEditMode() { state.editMode = !state.editMode; closeMenu(); render(); }
+    function toggleEditMode() { /* Edit mode is locked permanently ON as requested */ }
     function toggleMenu(e, id) {
       e.stopPropagation();
       state.activeMenuId = state.activeMenuId === id ? null : id;
@@ -771,7 +770,6 @@
     document.getElementById('photo-input').addEventListener('change', (e) => handleFileImport(e.target.files));
 
     function attachDragAndResizeListeners() {
-      if (!state.editMode) return;
       const elements = document.querySelectorAll('[data-id]');
       elements.forEach(el => {
         let activeDrag = false, activeResize = false;
