@@ -186,7 +186,6 @@
       try {
         const url = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/${CONFIG.ghPath}`;
         
-        // Support both old classic tokens (Bearer/token) and modern fine-grained tokens (Bearer)
         const authHeader = state.ghToken.startsWith('ghp_') || state.ghToken.startsWith('gho_') 
           ? `token ${state.ghToken}` 
           : `Bearer ${state.ghToken}`;
@@ -267,54 +266,49 @@
       const allChildrenSelected = items.length > 0 && items.every(item => state.selectedIds.includes(item.id));
 
       app.innerHTML = `
-        <!-- Header Controls -->
-        <header class="shrink-0 z-30 bg-black/95 backdrop-blur-lg border-b border-zinc-900 px-4 py-3 flex flex-col gap-3">
-          <div class="flex items-center justify-between gap-2 flex-wrap">
-            
-            <!-- Left Sync & Token Reset Buttons -->
-            <div class="flex items-center gap-1.5">
-              <button onclick="syncWithGitHub()" class="px-3 py-2.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl text-xs font-bold text-zinc-300 flex items-center gap-2 shadow-sm">
-                <i data-lucide="${state.isSyncing ? 'refresh-cw' : 'cloud'}" class="w-4 h-4 ${state.isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-400'}"></i>
-                <span class="hidden sm:inline">${state.isSyncing ? 'Syncing...' : 'Sync'}</span>
-              </button>
-              <button onclick="resetToken()" title="Reset saved GitHub token" class="p-2.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-2xl text-zinc-400 hover:text-zinc-200">
-                <i data-lucide="key" class="w-4 h-4"></i>
-              </button>
-            </div>
+        <!-- Header Controls in One Single Row on Top -->
+        <header class="shrink-0 z-30 bg-black/95 backdrop-blur-lg border-b border-zinc-900 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+          
+          <!-- Left group: Sync, Key, Home, Add Item -->
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button onclick="syncWithGitHub()" class="px-2.5 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-bold text-zinc-300 flex items-center gap-1.5 shadow-sm">
+              <i data-lucide="${state.isSyncing ? 'refresh-cw' : 'cloud'}" class="w-3.5 h-3.5 ${state.isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-400'}"></i>
+              <span class="hidden sm:inline">${state.isSyncing ? 'Syncing...' : 'Sync'}</span>
+            </button>
+            <button onclick="resetToken()" title="Reset saved GitHub token" class="p-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-zinc-400 hover:text-zinc-200">
+              <i data-lucide="key" class="w-3.5 h-3.5"></i>
+            </button>
 
-            <!-- Centered Larger Buttons: Home & Add -->
-            <div class="flex items-center justify-center gap-3 flex-1">
-              <button onclick="navigateTo(null)" class="px-5 py-2.5 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-white font-bold rounded-2xl text-base flex items-center gap-2 shadow-md">
-                <i data-lucide="home" class="w-5 h-5 text-amber-400"></i> Home
-              </button>
-              <button onclick="openUploadModal()" class="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-2xl text-base flex items-center gap-2 shadow-lg shadow-amber-500/20">
-                <i data-lucide="plus" class="w-5 h-5 stroke-[3]"></i> Add Item
-              </button>
-            </div>
-
-            <!-- Right Controls: Select / Select All / Edit -->
-            <div class="flex items-center gap-2">
-              ${state.selectMode ? `
-                <button onclick="toggleSelectAll()" class="px-3.5 py-2.5 bg-indigo-950 border border-indigo-700 rounded-2xl text-xs font-bold text-indigo-300 flex items-center gap-1.5 shadow-sm">
-                  <i data-lucide="${allChildrenSelected ? 'check-square' : 'square'}" class="w-4 h-4"></i>
-                  ${allChildrenSelected ? 'Deselect All' : 'Select All'}
-                </button>
-              ` : ''}
-
-              <button onclick="toggleSelectMode()" class="px-3.5 py-2.5 rounded-2xl text-xs font-bold border ${state.selectMode ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}">
-                ${state.selectMode ? 'Cancel' : 'Select'}
-              </button>
-
-              <button onclick="toggleEditMode()" class="px-3.5 py-2.5 rounded-2xl text-xs font-bold border ${state.editMode ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}">
-                ${state.editMode ? 'Done' : 'Edit'}
-              </button>
-            </div>
+            <button onclick="navigateTo(null)" class="px-3 py-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md">
+              <i data-lucide="home" class="w-4 h-4 text-amber-400"></i> Home
+            </button>
+            <button onclick="openUploadModal()" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20">
+              <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i> Add Item
+            </button>
           </div>
 
-          <!-- Breadcrumbs -->
-          <div class="flex items-center gap-1.5 text-xs text-zinc-400 overflow-x-auto no-scrollbar pt-1">
+          <!-- Breadcrumbs in the middle -->
+          <div class="flex items-center gap-1 text-xs text-zinc-400 truncate px-2 shrink">
             <span onclick="navigateTo(null)" class="cursor-pointer hover:text-white">Home</span>
-            ${currentFolder ? `<span class="text-zinc-600">/</span><span class="text-white font-semibold">${currentFolder.name}</span>` : ''}
+            ${currentFolder ? `<span class="text-zinc-600">/</span><span class="text-white font-semibold truncate">${currentFolder.name}</span>` : ''}
+          </div>
+
+          <!-- Right group: Select All, Select, Edit -->
+          <div class="flex items-center gap-1.5 shrink-0">
+            ${state.selectMode ? `
+              <button onclick="toggleSelectAll()" class="px-2.5 py-2 bg-indigo-950 border border-indigo-700 rounded-xl text-xs font-bold text-indigo-300 flex items-center gap-1 shadow-sm">
+                <i data-lucide="${allChildrenSelected ? 'check-square' : 'square'}" class="w-3.5 h-3.5"></i>
+                ${allChildrenSelected ? 'Deselect All' : 'Select All'}
+              </button>
+            ` : ''}
+
+            <button onclick="toggleSelectMode()" class="px-3 py-2 rounded-xl text-xs font-bold border ${state.selectMode ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}">
+              ${state.selectMode ? 'Cancel' : 'Select'}
+            </button>
+
+            <button onclick="toggleEditMode()" class="px-3 py-2 rounded-xl text-xs font-bold border ${state.editMode ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}">
+              ${state.editMode ? 'Done' : 'Edit'}
+            </button>
           </div>
         </header>
 
@@ -1024,8 +1018,25 @@
             if (isFolder(target)) saveFolder(target); else saveFile(target);
           }
 
-     @@ -1071,4 +1071,4 @@
-     loadData();
-   </script>
- </body>
- </html>
+          activeDrag = false;
+          activeResize = false;
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onEnd);
+          window.removeEventListener('touchmove', onMove);
+          window.removeEventListener('touchend', onEnd);
+        };
+
+        el.addEventListener('mousedown', onStart);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onEnd);
+
+        el.addEventListener('touchstart', onStart, { passive: true });
+        window.addEventListener('touchmove', onMove, { passive: true });
+        window.addEventListener('touchend', onEnd);
+      });
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
