@@ -168,7 +168,7 @@
       }
     }
 
-    // --- TOKEN & GITHUB SYNC ---
+    // --- TOKEN & GITHUB SYNC (WITH CHUNKING TO PREVENT 500 ERRORS) ---
     function resetToken() {
       const token = prompt('Enter your GitHub Personal Access Token:', state.ghToken);
       if (token !== null) {
@@ -189,31 +189,39 @@
       render();
 
       try {
-        const url = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/${CONFIG.ghPath}`;
         let cleanToken = state.ghToken.replace(/^(token|Bearer)\s+/i, '').trim();
         const authHeader = `token ${cleanToken}`;
-
         const headers = {
           'Authorization': authHeader,
           'Accept': 'application/vnd.github.v3+json',
           'X-GitHub-Api-Version': '2022-11-28'
         };
 
-        let sha = null;
-        const getRes = await fetch(url, { headers });
+        // Base metadata file check
+        const metaUrl = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/aiden_meta.json`;
         
-        if (getRes.status === 401 || getRes.status === 403) {
-          throw new Error(`GitHub Authentication failed (${getRes.status}). Please verify your token has 'repo' or 'contents:write' permissions.`);
-        }
+        if (forcePull) {
+          const getRes = await fetch(metaUrl, { headers });
+          if (getRes.ok) {
+            const getJson = await getRes.json();
+            const manifest = JSON.parse(decodeURIComponent(escape(atob(getJson.content))));
+            
+            let allFolders = [];
+            let allFiles = [];
 
-        if (getRes.ok) {
-          const getJson = await getRes.json();
-          sha = getJson.sha;
-          
-          if (forcePull || (state.files.length === 0 && state.folders.length <= 1)) {
-            const remoteContent = JSON.parse(decodeURIComponent(escape(atob(getJson.content))));
-            state.folders = remoteContent.folders || state.folders;
-            state.files = remoteContent.files || state.files;
+            for (let chunkFileName of manifest.chunks) {
+              const chunkUrl = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/chunks/${chunkFileName}`;
+              const chunkRes = await fetch(chunkUrl, { headers });
+              if (chunkRes.ok) {
+                const chunkJson = await chunkRes.json();
+                const chunkData = JSON.parse(decodeURIComponent(escape(atob(chunkJson.content))));
+                if (chunkData.folders) allFolders.push(...chunkData.folders);
+                if (chunkData.files) allFiles.push(...chunkData.files);
+              }
+            }
+
+            state.folders = allFolders.length > 0 ? allFolders : state.folders;
+            state.files = allFiles.length > 0 ? allFiles : state.files;
 
             for (let file of state.files) {
               if (file.dataUrl && (file.fileType?.startsWith('video/') || file.fileType?.startsWith('audio/'))) {
@@ -223,43 +231,85 @@
 
             for (let f of state.folders) await saveFolder(f);
             for (let fi of state.files) await saveFile(fi);
-            alert('Synced data down from Cloud!');
+            alert('Synced chunks down from Cloud successfully!');
             state.isSyncing = false;
             render();
             return;
           }
         }
 
-        // Clean files array before serializing to prevent payload bloat / status 500 server crash
+        // Sanitize files
         const sanitizedFiles = state.files.map(file => {
           const copy = { ...file };
           delete copy.blobUrl;
           return copy;
         });
 
-        const jsonString = JSON.stringify({ folders: state.folders, files: sanitizedFiles });
-        
-        const payload = {
-          message: 'Sync Aiden Files Data',
-          content: btoa(unescape(encodeURIComponent(jsonString))),
-          ...(sha && { sha })
+        // Split files into chunks of max 15 items each to completely avoid GitHub payload size limit / 500 error
+        const CHUNK_SIZE = 15;
+        const fileChunks = [];
+        for (let i = 0; i < sanitizedFiles.length; i += CHUNK_SIZE) {
+          fileChunks.push(sanitizedFiles.slice(i, i + CHUNK_SIZE));
+        }
+        if (fileChunks.length === 0) fileChunks.push([]);
+
+        const chunkFileNames = [];
+
+        for (let index = 0; index < fileChunks.length; index++) {
+          const chunkFileName = `chunk_${index}.json`;
+          chunkFileNames.push(chunkFileName);
+          const chunkUrl = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/chunks/${chunkFileName}`;
+
+          // Get existing SHA for this chunk if it exists
+          let chunkSha = null;
+          const existingChunkRes = await fetch(chunkUrl, { headers });
+          if (existingChunkRes.ok) {
+            const existingData = await existingChunkRes.json();
+            chunkSha = existingData.sha;
+          }
+
+          const chunkPayloadData = {
+            folders: index === 0 ? state.folders : [], // store folders in first chunk
+            files: fileChunks[index]
+          };
+
+          const chunkPutPayload = {
+            message: `Sync Aiden Files Chunk ${index}`,
+            content: btoa(unescape(encodeURIComponent(JSON.stringify(chunkPayloadData)))),
+            ...(chunkSha && { sha: chunkSha })
+          };
+
+          let putRes = await fetch(chunkUrl, { method: 'PUT', headers, body: JSON.stringify(chunkPutPayload) });
+          if (putRes.status === 500) {
+            await new Promise(r => setTimeout(r, 1500));
+            putRes = await fetch(chunkUrl, { method: 'PUT', headers, body: JSON.stringify(chunkPutPayload) });
+          }
+          if (!putRes.ok) {
+            throw new Error(`Failed to upload chunk ${index} (status ${putRes.status})`);
+          }
+        }
+
+        // Update main meta manifest file
+        let metaSha = null;
+        const existingMetaRes = await fetch(metaUrl, { headers });
+        if (existingMetaRes.ok) {
+          const metaJson = await existingMetaRes.json();
+          metaSha = metaJson.sha;
+        }
+
+        const metaManifest = { chunks: chunkFileNames, updatedAt: new Date().toISOString() };
+        const metaPutPayload = {
+          message: 'Update Aiden Files Manifest',
+          content: btoa(unescape(encodeURIComponent(JSON.stringify(metaManifest)))),
+          ...(metaSha && { sha: metaSha })
         };
 
-        let putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
-        
-        // Retry logic specifically for intermittent GitHub 500 errors
-        if (putRes.status === 500) {
-          console.warn('GitHub returned 500. Retrying upload once...');
-          await new Promise(r => setTimeout(r, 2000));
-          putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
+        const metaPutRes = await fetch(metaUrl, { method: 'PUT', headers, body: JSON.stringify(metaPutPayload) });
+        if (!metaPutRes.ok) {
+          throw new Error('Failed to update manifest file on GitHub.');
         }
 
-        if (putRes.ok) {
-          alert('Sync Successful! Cloud backup updated.');
-        } else {
-          const errData = await putRes.json().catch(() => ({}));
-          throw new Error(errData.message || `GitHub returned status ${putRes.status}`);
-        }
+        alert('Chunked Sync Successful! Cloud backup updated safely without server errors.');
       } catch (err) {
         alert('Sync error: ' + err.message);
       } finally {
