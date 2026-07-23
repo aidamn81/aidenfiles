@@ -51,7 +51,7 @@
   <script>
     // --- CONFIG & STATE ---
     const CONFIG = {
-      ghRepo: 'aidamn81/aidenvidz',
+      ghRepo: 'aidamn81/aidenfiles',
       ghPath: 'aiden_data.json',
       GRID_SIZE: 24
     };
@@ -1024,20 +1024,8 @@
             if (isFolder(target)) saveFolder(target); else saveFile(target);
           }
 
-          activeDrag = false;
-          activeResize = false;
-        };
-
-        el.addEventListener('touchstart', onStart, { passive: true });
-        el.addEventListener('mousedown', onStart);
-        window.addEventListener('touchmove', onMove, { passive: true });
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('touchend', onEnd);
-        window.addEventListener('mouseup', onEnd);
-      });
-    }
-
-    loadData();
-  </script>
-</body>
-</html>
+     @@ -1071,4 +1071,4 @@
+     loadData();
+   </script>
+ </body>
+ </html>
