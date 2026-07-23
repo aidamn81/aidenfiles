@@ -355,7 +355,7 @@
             <div class="folder-cube bg-gradient-to-b from-zinc-800 to-zinc-950 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-zinc-700/60'} flex flex-col items-center justify-center relative overflow-hidden group">
               ${item.coverUrl ? `<img src="${item.coverUrl}" class="w-full h-full object-cover pointer-events-none" />` : `<i data-lucide="folder" class="w-10 h-10 text-amber-400 fill-amber-400/20 stroke-[1.5] pointer-events-none"></i>`}
               ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
-              ${!state.selectMode ? `<button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/50 hover:bg-black/90 rounded-full text-zinc-300 z-10"><i data-lucide="more-vertical" class="w-4 h-4"></i></button>` : ''}
+              ${!state.selectMode ? `<button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/50 hover:bg-black/95 rounded-full text-zinc-200 z-30 cursor-pointer"><i data-lucide="more-vertical" class="w-4 h-4"></i></button>` : ''}
             </div>
             <span class="text-[11px] font-medium text-zinc-300 max-w-full truncate text-center mt-1.5 pointer-events-none">${item.name}</span>
             ${state.editMode ? '<div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>' : ''}
@@ -380,7 +380,7 @@
                 </div>
               `}
               ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
-              ${!state.selectMode ? `<button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/60 hover:bg-black/90 rounded-full text-zinc-200 backdrop-blur-sm z-10"><i data-lucide="more-vertical" class="w-4 h-4"></i></button>` : ''}
+              ${!state.selectMode ? `<button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/60 hover:bg-black/95 rounded-full text-zinc-200 backdrop-blur-sm z-30 cursor-pointer"><i data-lucide="more-vertical" class="w-4 h-4"></i></button>` : ''}
             </div>
             <div class="p-1.5 bg-zinc-900 flex items-center justify-between border-t border-zinc-800 pointer-events-none">
               <span class="text-[10px] font-medium text-zinc-200 truncate flex-1">${item.name}</span>
@@ -398,15 +398,16 @@
           ${isFolderItem ? `
             <button onclick="triggerFolderCover('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400"></i> Change Cover</button>
           ` : `
-            <button onclick="openQuickView('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="eye" class="w-3.5 h-3.5 text-zinc-400"></i> Open / Preview</button>
-            <button onclick="shareFile('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="share" class="w-3.5 h-3.5 text-zinc-400"></i> Share (iOS)</button>
+            <button onclick="openQuickView('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="eye" class="w-3.5 h-3.5 text-zinc-400"></i> Quick Look</button>
+            <button onclick="copySingleFile('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="copy" class="w-3.5 h-3.5 text-zinc-400"></i> Copy</button>
+            <button onclick="shareFile('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="share" class="w-3.5 h-3.5 text-zinc-400"></i> iOS Share</button>
             <button onclick="triggerChangeImage('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400"></i> Change Image</button>
           `}
           <button onclick="renameItem('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="edit-3" class="w-3.5 h-3.5 text-zinc-400"></i> Rename</button>
           <button onclick="moveToFolder('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="folder-output" class="w-3.5 h-3.5 text-zinc-400"></i> Move to folder</button>
           <button onclick="snapToOriginalShape('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400"></i> Snap to original shape</button>
           <div class="h-px bg-zinc-800 my-1"></div>
-          <button onclick="deleteItemConfirm('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400"></i> Delete with confirmation</button>
+          <button onclick="deleteItemConfirm('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400"></i> Delete</button>
         </div>
       `;
     }
@@ -433,7 +434,7 @@
       const mediaUrl = file.blobUrl || file.dataUrl;
       
       if (type.startsWith('image/')) return `<img src="${file.dataUrl}" class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl" />`;
-      if (type.startsWith('video/')) return `<video controls playsinline autoplay class="max-w-full max-h-full rounded-2xl shadow-2xl bg-black" src="${mediaUrl}"></video>`;
+      if (type.startsWith('video/')) return `<video controls playsinline autoplay class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl bg-black" src="${mediaUrl}"></video>`;
       if (type.startsWith('audio/')) {
         return `
           <div class="flex flex-col items-center gap-6 p-8 bg-zinc-900 border border-zinc-800 rounded-3xl max-w-sm w-full shadow-2xl text-center">
@@ -444,7 +445,7 @@
         `;
       }
       if (type === 'application/pdf' || file.name.endsWith('.pdf')) return `<iframe src="${file.dataUrl}" class="w-full h-full rounded-2xl border border-zinc-800 bg-white"></iframe>`;
-      if (type.startsWith('text/') || file.name.endsWith('.txt')) return `<div class="w-full h-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 overflow-auto text-xs font-mono text-zinc-300 whitespace-pre-wrap select-text">${file.textContent || ''}</div>`;
+      if (type.startsWith('text/') || file.name.endsWith('.txt')) return `<div class="w-full h-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl p-4 overflow-auto text-xs font-mono text-zinc-300 whitespace-pre-wrap select-text">${file.textContent || ''}</div>`;
       return `<div class="flex flex-col items-center gap-3 text-zinc-500"><i data-lucide="file-text" class="w-16 h-16"></i><span class="text-xs text-zinc-400">${file.name}</span></div>`;
     }
 
@@ -453,12 +454,12 @@
       if (!file) return '';
       return `
         <div class="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col justify-between p-4" onclick="closeQuickView()">
-          <div class="flex items-center justify-between text-zinc-300 pt-2 px-2" onclick="event.stopPropagation()">
+          <div class="flex items-center justify-between text-zinc-300 pt-2 px-2 shrink-0" onclick="event.stopPropagation()">
             <span class="text-sm font-semibold truncate max-w-[200px]">${file.name}</span>
             <button onclick="closeQuickView()" class="p-2 bg-zinc-900 border border-zinc-800 rounded-full hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
           </div>
-          <div class="flex-1 flex items-center justify-center overflow-hidden my-4" onclick="event.stopPropagation()">${renderQuickViewContent(file)}</div>
-          <div class="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 flex items-center justify-around text-xs font-semibold text-zinc-200" onclick="event.stopPropagation()">
+          <div class="flex-1 flex items-center justify-center overflow-hidden my-4 px-2" onclick="event.stopPropagation()">${renderQuickViewContent(file)}</div>
+          <div class="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 flex items-center justify-around text-xs font-semibold text-zinc-200 shrink-0" onclick="event.stopPropagation()">
             <button onclick="copySingleFile('${file.id}')" class="flex flex-col items-center gap-1 hover:text-amber-400"><i data-lucide="copy" class="w-5 h-5"></i> Copy</button>
             <button onclick="moveToFolder('${file.id}', false); closeQuickView();" class="flex flex-col items-center gap-1 hover:text-amber-400"><i data-lucide="folder-output" class="w-5 h-5"></i> Move</button>
             <button onclick="shareFile('${file.id}')" class="flex flex-col items-center gap-1 hover:text-amber-400"><i data-lucide="share" class="w-5 h-5"></i> Share</button>
@@ -547,7 +548,7 @@
         state.files.push(newFile);
         await saveFile(newFile);
         alert('File copied successfully!');
-        closeQuickView();
+        closeMenu();
         render();
       }
     }
@@ -568,6 +569,7 @@
       }
       if (navigator.share) await navigator.share({ title: file.name, text: file.name, url: file.dataUrl });
       else alert('Sharing is not supported on this device.');
+      closeMenu();
     }
 
     function triggerFolderCover(id) { state.targetFolderCoverId = id; document.getElementById('folder-cover-input').click(); closeMenu(); }
@@ -714,6 +716,7 @@
         const resizeHandle = el.querySelector('.resize-handle');
 
         const onStart = (e) => {
+          if (e.target.closest('button')) return;
           const touch = e.touches ? e.touches[0] : e;
           startX = touch.clientX; startY = touch.clientY;
           if (e.target === resizeHandle || resizeHandle?.contains(e.target)) {
@@ -759,7 +762,6 @@
 
     loadData();
     
-    // Auto-pull from cloud on first load if IndexedDB is empty to restore your content seamlessly
     setTimeout(() => {
       if (state.files.length === 0 && state.folders.length <= 1 && state.ghToken) {
         syncWithGitHub(true);
