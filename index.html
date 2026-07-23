@@ -317,7 +317,7 @@
         <div class="context-option" onclick="ctxAction('rename')">Rename</div>
         <div class="context-option" onclick="ctxAction('moveToFolder')">Move to Folder</div>
         <div class="context-option" onclick="ctxAction('openTab')">Open in New Tab</div>
-        <div class="context-option" onclick="ctxAction('delete')" style="color: #ff4d4d;">Delete</div>
+        <div class="context-option" onclick="ctxAction('delete')" style="color: #ff4d4d;">Delete with Confirmation</div>
     </div>
 
     <!-- Confirmation Modal -->
@@ -367,6 +367,7 @@
             btn.classList.toggle('active', editMode);
             btn.textContent = editMode ? 'Lock Edit' : 'Edit Mode';
             if (!editMode) contextMenu.style.display = 'none';
+            renderItems();
         }
 
         function recentering() {
@@ -412,7 +413,6 @@
                 let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
                 newScale = Math.max(0.2, Math.min(3, newScale));
                 
-                // Zoom around center
                 const rect = container.getBoundingClientRect();
                 const mouseX = e.clientX - rect.left;
                 const mouseY = e.clientY - rect.top;
@@ -449,12 +449,10 @@
                     <div class="resizer"></div>
                 `;
 
-                // Dragging and Editing logic
                 if (editMode) {
                     setupDragAndResize(el, item);
                 }
 
-                // Context menu on right click
                 el.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     if (editMode) {
@@ -477,7 +475,7 @@
 
             const header = el.querySelector('.item-header');
             header.addEventListener('mousedown', (e) => {
-                if (e.target.tagName === 'INPUT') return;
+                if (!editMode || e.target.tagName === 'INPUT') return;
                 isDragging = true;
                 startX = e.clientX - item.x * scale;
                 startY = e.clientY - item.y * scale;
@@ -486,6 +484,7 @@
 
             const resizer = el.querySelector('.resizer');
             resizer.addEventListener('mousedown', (e) => {
+                if (!editMode) return;
                 isResizing = true;
                 startX = e.clientX;
                 startY = e.clientY;
@@ -493,10 +492,10 @@
             });
 
             window.addEventListener('mousemove', (e) => {
+                if (!editMode) return;
                 if (isDragging) {
                     let rawX = (e.clientX - startX) / scale;
                     let rawY = (e.clientY - startY) / scale;
-                    // Snap to grid
                     item.x = Math.round(rawX / snapSize) * snapSize;
                     item.y = Math.round(rawY / snapSize) * snapSize;
                     el.style.left = `${item.x}px`;
