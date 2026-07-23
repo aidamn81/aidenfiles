@@ -275,10 +275,10 @@
             <button onclick="navigateTo(null)" class="px-3 py-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md">
               <i data-lucide="home" class="w-4 h-4 text-amber-400"></i> Home
             </button>
-            <button onclick="openNewFolderModal()" class="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-zinc-700/60 shadow-sm">
+            <button onclick="openNewFolderModal()" class="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-zinc-700/60 shadow-sm cursor-pointer">
               <i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i> New Folder
             </button>
-            <button onclick="openUploadModal()" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20">
+            <button onclick="openUploadModal()" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer">
               <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i> Add Item
             </button>
           </div>
@@ -359,7 +359,7 @@
             <div class="folder-cube bg-gradient-to-b from-zinc-800 to-zinc-950 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-zinc-700/60'} flex flex-col items-center justify-center relative overflow-hidden group">
               ${item.coverUrl ? `<img src="${item.coverUrl}" class="w-full h-full object-cover rounded-[20px] pointer-events-none" />` : `<i data-lucide="folder" class="w-10 h-10 text-amber-400 fill-amber-400/20 stroke-[1.5] pointer-events-none"></i>`}
               ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
-              ${!state.selectMode ? `<button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/50 hover:bg-black/95 rounded-full text-zinc-200 z-30 cursor-pointer"><i data-lucide="more-vertical" class="w-4 h-4"></i></button>` : ''}
+              ${!state.selectMode ? `<button type="button" onclick="toggleMenu(event, '${item.id}')" class="absolute top-1.5 right-1.5 p-2 bg-black/60 hover:bg-black/95 rounded-full text-zinc-200 z-30 cursor-pointer"><i data-lucide="more-vertical" class="w-4 h-4 pointer-events-none"></i></button>` : ''}
             </div>
             <span class="text-[11px] font-medium text-zinc-300 max-w-full truncate text-center mt-1.5 pointer-events-none">${item.name}</span>
             ${state.editMode ? '<div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>' : ''}
@@ -384,7 +384,7 @@
                 </div>
               `}
               ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
-              ${!state.selectMode ? `<button onclick="event.stopPropagation(); toggleMenu('${item.id}')" class="absolute top-1.5 right-1.5 p-1.5 bg-black/60 hover:bg-black/95 rounded-full text-zinc-200 backdrop-blur-sm z-30 cursor-pointer"><i data-lucide="more-vertical" class="w-4 h-4"></i></button>` : ''}
+              ${!state.selectMode ? `<button type="button" onclick="toggleMenu(event, '${item.id}')" class="absolute top-1.5 right-1.5 p-2 bg-black/60 hover:bg-black/95 rounded-full text-zinc-200 backdrop-blur-sm z-30 cursor-pointer"><i data-lucide="more-vertical" class="w-4 h-4 pointer-events-none"></i></button>` : ''}
             </div>
             <div class="p-1.5 bg-zinc-900 flex items-center justify-between border-t border-zinc-800 rounded-b-2xl pointer-events-none">
               <span class="text-[10px] font-medium text-zinc-200 truncate flex-1">${item.name}</span>
@@ -400,18 +400,18 @@
       return `
         <div onclick="event.stopPropagation()" class="absolute left-full top-0 ml-2 w-48 bg-zinc-900/95 border border-zinc-700/80 rounded-xl shadow-2xl backdrop-blur-md z-50 overflow-hidden text-xs py-1">
           ${isFolderItem ? `
-            <button onclick="triggerFolderCover('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400"></i> Change cover image</button>
+            <button type="button" onclick="triggerFolderCover('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Change cover image</button>
           ` : `
-            <button onclick="openQuickView('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="eye" class="w-3.5 h-3.5 text-zinc-400"></i> Quick Look</button>
-            <button onclick="copySingleFileClipboard('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="copy" class="w-3.5 h-3.5 text-zinc-400"></i> Copy</button>
-            <button onclick="shareFile('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="share" class="w-3.5 h-3.5 text-zinc-400"></i> iOS Share</button>
-            <button onclick="triggerChangeImage('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400"></i> Change Image</button>
+            <button type="button" onclick="openQuickView('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="eye" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Quick Look</button>
+            <button type="button" onclick="copySingleFileClipboard('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="copy" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Copy</button>
+            <button type="button" onclick="shareFile('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="share" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> iOS Share</button>
+            <button type="button" onclick="triggerChangeImage('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Change Image</button>
           `}
-          <button onclick="renameItem('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="edit-3" class="w-3.5 h-3.5 text-zinc-400"></i> Rename</button>
-          <button onclick="moveToFolder('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="folder-output" class="w-3.5 h-3.5 text-zinc-400"></i> Move to folder</button>
-          <button onclick="snapToOriginalShape('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400"></i> Snap to original shape</button>
+          <button type="button" onclick="renameItem('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="edit-3" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Rename</button>
+          <button type="button" onclick="moveToFolder('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="folder-output" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Move to folder</button>
+          <button type="button" onclick="snapToOriginalShape('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Snap to original shape</button>
           <div class="h-px bg-zinc-800 my-1"></div>
-          <button onclick="deleteItemConfirm('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400"></i> Delete</button>
+          <button type="button" onclick="deleteItemConfirm('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium cursor-pointer"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400 pointer-events-none"></i> Delete</button>
         </div>
       `;
     }
@@ -497,7 +497,11 @@
     function closeQuickView() { state.quickViewFileId = null; render(); }
     function navigateTo(id) { state.currentFolderId = id; closeMenu(); render(); }
     function toggleEditMode() { state.editMode = !state.editMode; closeMenu(); render(); }
-    function toggleMenu(id) { state.activeMenuId = state.activeMenuId === id ? null : id; render(); }
+    function toggleMenu(e, id) {
+      e.stopPropagation();
+      state.activeMenuId = state.activeMenuId === id ? null : id;
+      render();
+    }
     function closeMenu() { if (state.activeMenuId) { state.activeMenuId = null; render(); } }
 
     async function bulkDelete() {
@@ -546,33 +550,36 @@
     async function copySingleFileClipboard(id) {
       const file = state.files.find(f => f.id === id);
       if (!file) return;
+      
       try {
         if (file.dataUrl && navigator.clipboard && window.ClipboardItem) {
           const res = await fetch(file.dataUrl);
           const blob = await res.blob();
           await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-          alert('File copied to clipboard! You can now paste it into other apps or folders.');
-        } else if (file.textContent && navigator.clipboard) {
+          alert('File copied to clipboard successfully!');
+          closeMenu();
+          render();
+          return;
+        }
+        if (file.textContent && navigator.clipboard) {
           await navigator.clipboard.writeText(file.textContent);
-          alert('Text content copied to clipboard!');
-        } else {
-          // Internal copy fallback
-          const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
-          delete newFile.x; delete newFile.y; delete newFile.blobUrl;
-          if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) await getOrCreateBlobUrl(newFile);
-          state.files.push(newFile);
-          await saveFile(newFile);
-          alert('File copied successfully within Aiden Files!');
+          alert('Text content copied to clipboard successfully!');
+          closeMenu();
+          render();
+          return;
         }
       } catch (e) {
-        // Internal copy fallback if clipboard API restricts
-        const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
-        delete newFile.x; delete newFile.y; delete newFile.blobUrl;
-        if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) await getOrCreateBlobUrl(newFile);
-        state.files.push(newFile);
-        await saveFile(newFile);
-        alert('File copied successfully within Aiden Files!');
+        console.warn('Direct clipboard API restricted, falling back to data duplicate', e);
       }
+
+      const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
+      delete newFile.x; delete newFile.y; delete newFile.blobUrl;
+      if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) {
+        await getOrCreateBlobUrl(newFile);
+      }
+      state.files.push(newFile);
+      await saveFile(newFile);
+      alert('Copied file successfully inside Aiden Files!');
       closeMenu();
       render();
     }
