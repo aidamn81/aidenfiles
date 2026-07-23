@@ -1,659 +1,863 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="bg-black text-white select-none">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Gothic Archive</title>
-    <style>
-        :root {
-            --bg-color: #0c0a09;
-            --surface-color: #171412;
-            --surface-glass: rgba(23, 20, 18, 0.85);
-            --border-color: #3b2f2f;
-            --border-glow: #5c4033;
-            --text-main: #e7e2dc;
-            --text-muted: #a39b93;
-            --accent: #8b0000;
-            --accent-glow: #ff4d4d;
-            --gold: #d4af37;
-            --gold-glow: rgba(212, 175, 55, 0.3);
-            --grid-line: rgba(139, 0, 0, 0.08);
-            --font-main: 'Cinzel', 'Times New Roman', serif;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Aiden Files</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    .edit-grid-bg {
+      background-size: 24px 24px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
-        }
+    .touch-none { touch-action: none; }
 
-        body, html {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: var(--font-main);
-        }
+    .folder-cube {
+      width: 100%;
+      height: 100%;
+      border-radius: 22px;
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.15), 0 8px 16px rgba(0, 0, 0, 0.6);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      overflow: hidden;
+    }
+    .folder-cube:active { transform: scale(0.95); }
 
-        #app-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            background: radial-gradient(circle at center, #1a1212 0%, #0c0a09 100%);
-        }
+    .resize-handle {
+      width: 28px;
+      height: 28px;
+      bottom: -4px;
+      right: -4px;
+      border-top-left-radius: 12px;
+      touch-action: none;
+      display: none;
+    }
 
-        /* Guide Grid Overlay */
-        #guide-grid {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image: 
-                linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
-                linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
-            background-size: 40px 40px;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            z-index: 1;
-        }
-
-        body.edit-mode #guide-grid {
-            opacity: 1;
-        }
-
-        /* Infinite Canvas Layer */
-        #canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 5000px;
-            height: 5000px;
-            transform-origin: 0 0;
-            cursor: grab;
-            z-index: 2;
-        }
-
-        #canvas:active {
-            cursor: grabbing;
-        }
-
-        body.edit-mode #canvas {
-            cursor: default;
-        }
-
-        /* Archive Items (Relics & Folders) */
-        .archive-item {
-            position: absolute;
-            background: var(--surface-glass);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            padding: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
-            transition: border-color 0.2s, box-shadow 0.2s;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            backdrop-filter: blur(5px);
-        }
-
-        .archive-item:hover {
-            border-color: var(--border-glow);
-            box-shadow: 0 0 15px var(--gold-glow);
-        }
-
-        body.edit-mode .archive-item {
-            cursor: move;
-            border-style: dashed;
-            border-color: var(--accent);
-        }
-
-        .archive-item.folder {
-            min-width: 200px;
-            min-height: 150px;
-            background: rgba(20, 15, 14, 0.9);
-        }
-
-        .item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 6px;
-            font-size: 0.9rem;
-            letter-spacing: 1px;
-            color: var(--gold);
-        }
-
-        .item-title {
-            outline: none;
-            border: none;
-            background: transparent;
-            color: var(--gold);
-            font-family: var(--font-main);
-            width: 100%;
-        }
-
-        .item-content {
-            flex-grow: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-            position: relative;
-            min-height: 80px;
-        }
-
-        .item-content img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            border-radius: 2px;
-        }
-
-        /* Resizer Handle */
-        .resizer {
-            position: absolute;
-            right: 2px;
-            bottom: 2px;
-            width: 12px;
-            height: 12px;
-            cursor: nwse-resize;
-            display: none;
-        }
-
-        body.edit-mode .resizer {
-            display: block;
-        }
-
-        .resizer::after {
-            content: '';
-            position: absolute;
-            right: 3px;
-            bottom: 3px;
-            width: 6px;
-            height: 6px;
-            border-right: 2px solid var(--gold);
-            border-bottom: 2px solid var(--gold);
-        }
-
-        /* Formatting Toolbar */
-        #toolbar {
-            position: fixed;
-            bottom: 25px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--surface-glass);
-            border: 1px solid var(--border-color);
-            padding: 10px 20px;
-            border-radius: 30px;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            z-index: 1000;
-            backdrop-filter: blur(8px);
-        }
-
-        .tool-btn {
-            background: transparent;
-            border: 1px solid var(--border-color);
-            color: var(--text-main);
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-family: var(--font-main);
-            font-size: 0.85rem;
-            letter-spacing: 1px;
-            transition: all 0.2s ease;
-        }
-
-        .tool-btn:hover {
-            border-color: var(--gold);
-            color: var(--gold);
-            box-shadow: 0 0 10px var(--gold-glow);
-        }
-
-        .tool-btn.active {
-            background: var(--accent);
-            border-color: var(--accent-glow);
-            color: #fff;
-        }
-
-        /* Context Menu */
-        #context-menu {
-            position: fixed;
-            background: var(--surface-color);
-            border: 1px solid var(--gold);
-            border-radius: 4px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.9);
-            display: none;
-            flex-direction: column;
-            z-index: 2000;
-            min-width: 160px;
-        }
-
-        .context-option {
-            padding: 10px 15px;
-            font-size: 0.85rem;
-            color: var(--text-main);
-            cursor: pointer;
-            border-bottom: 1px solid var(--border-color);
-            transition: background 0.2s, color 0.2s;
-        }
-
-        .context-option:last-child {
-            border-bottom: none;
-        }
-
-        .context-option:hover {
-            background: var(--accent);
-            color: #fff;
-        }
-
-        /* Modal Confirmation */
-        #modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 3000;
-        }
-
-        .modal-box {
-            background: var(--surface-color);
-            border: 1px solid var(--gold);
-            padding: 25px;
-            border-radius: 6px;
-            text-align: center;
-            max-width: 350px;
-            width: 100%;
-            box-shadow: 0 0 25px var(--gold-glow);
-        }
-
-        .modal-msg {
-            margin-bottom: 20px;
-            font-size: 0.95rem;
-            letter-spacing: 1px;
-        }
-
-        .modal-actions {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-        }
-    </style>
+    body.edit-mode .resize-handle {
+      display: flex;
+    }
+  </style>
 </head>
-<body>
+<body class="bg-black min-h-screen text-zinc-100 selection:bg-zinc-800 overflow-hidden">
+  <div id="app" class="h-screen w-screen bg-black text-white flex flex-col overflow-hidden"></div>
 
-    <div id="app-container">
-        <div id="guide-grid"></div>
-        <div id="canvas"></div>
-    </div>
+  <!-- Hidden Inputs -->
+  <input id="file-input" type="file" multiple class="hidden" />
+  <input id="photo-input" type="file" accept="image/*,video/*,audio/*" multiple class="hidden" />
+  <input id="change-image-input" type="file" accept="image/*" class="hidden" />
+  <input id="folder-cover-input" type="file" accept="image/*" class="hidden" />
 
-    <!-- Formatting Bar -->
-    <div id="toolbar">
-        <button class="tool-btn" id="btn-edit" onclick="toggleEditMode()">Edit Mode</button>
-        <button class="tool-btn" id="btn-recentering" onclick="recentering()">Recenter</button>
-        <button class="tool-btn" onclick="addRelic()">Add Relic</button>
-        <button class="tool-btn" onclick="addFolder()">Add Folder</button>
-        <button class="tool-btn" onclick="saveArchive()">Save</button>
-        <button class="tool-btn" onclick="loadArchiveModal()">Load</button>
-    </div>
+  <script>
+    // --- CONFIG & STATE ---
+    const CONFIG = {
+      ghRepo: 'aidamn81/aidenfiles',
+      ghPath: 'aiden_data.json',
+      GRID_SIZE: 24
+    };
 
-    <!-- Context Menu -->
-    <div id="context-menu">
-        <div class="context-option" onclick="ctxAction('resizeOriginal')">Resize to Original</div>
-        <div class="context-option" onclick="ctxAction('changeImage')">Change Image</div>
-        <div class="context-option" onclick="ctxAction('rename')">Rename</div>
-        <div class="context-option" onclick="ctxAction('moveToFolder')">Move to Folder</div>
-        <div class="context-option" onclick="ctxAction('openTab')">Open in New Tab</div>
-        <div class="context-option" onclick="ctxAction('delete')" style="color: #ff4d4d;">Delete with Confirmation</div>
-    </div>
+    let state = {
+      editMode: false,
+      selectMode: false,
+      selectedIds: [],
+      currentFolderId: null,
+      folders: [],
+      files: [],
+      ghToken: localStorage.getItem('af_gh_token') || '',
+      isSyncing: false,
+      activeMenuId: null,
+      targetChangeImageId: null,
+      targetFolderCoverId: null,
+      quickViewFileId: null,
+      showUploadModal: false
+    };
 
-    <!-- Confirmation Modal -->
-    <div id="modal-overlay">
-        <div class="modal-box">
-            <div class="modal-msg" id="modal-text">Are you sure you want to delete this relic?</div>
-            <div class="modal-actions">
-                <button class="tool-btn" onclick="confirmAction(true)">Confirm</button>
-                <button class="tool-btn" onclick="confirmAction(false)">Cancel</button>
-            </div>
-        </div>
-    </div>
+    const uid = () => Math.random().toString(36).substring(2, 9);
+    const isFolder = item => !('fileType' in item);
 
-    <input type="file" id="hidden-file-input" style="display: none;" accept="image/*" onchange="handleImageUpload(event)">
+    // --- MEDIA PLAYBACK HELPER ---
+    async function getOrCreateBlobUrl(file) {
+      if (file.blobUrl) return file.blobUrl;
+      if (!file.dataUrl) return '';
+      try {
+        const res = await fetch(file.dataUrl);
+        const blob = await res.blob();
+        file.blobUrl = URL.createObjectURL(blob);
+        return file.blobUrl;
+      } catch (e) {
+        return file.dataUrl;
+      }
+    }
 
-    <script>
-        // State management
-        let editMode = false;
-        let scale = 1;
-        let panX = 1500;
-        let panY = 1500;
-        let isPanning = false;
-        let startX = 0, startY = 0;
-        
-        let items = [
-            { id: 'relic-1', type: 'relic', title: 'The Crimson Codex', x: 2400, y: 2400, w: 220, h: 200, content: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80', originalW: 220, originalH: 200 }
-        ];
+    // --- INDEXEDDB ---
+    const DB_NAME = 'aiden_files_db';
+    const DB_VERSION = 3;
 
-        let activeCtxItem = null;
-        let pendingDeleteId = null;
-        let activeImageTarget = null;
+    function openDB() {
+      return new Promise((resolve) => {
+        try {
+          const req = indexedDB.open(DB_NAME, DB_VERSION);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('folders')) db.createObjectStore('folders', { keyPath: 'id' });
+            if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'id' });
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(null);
+        } catch (e) { resolve(null); }
+      });
+    }
 
-        const canvas = document.getElementById('canvas');
-        const contextMenu = document.getElementById('context-menu');
-
-        // Initialize view
-        function init() {
-            renderItems();
-            updateTransform();
-            setupCanvasPanZoom();
-        }
-
-        function toggleEditMode() {
-            editMode = !editMode;
-            document.body.classList.toggle('edit-mode', editMode);
-            const btn = document.getElementById('btn-edit');
-            btn.classList.toggle('active', editMode);
-            btn.textContent = editMode ? 'Lock Edit' : 'Edit Mode';
-            if (!editMode) contextMenu.style.display = 'none';
-            renderItems();
-        }
-
-        function recentering() {
-            panX = 1500;
-            panY = 1500;
-            scale = 1;
-            updateTransform();
-        }
-
-        function updateTransform() {
-            canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-        }
-
-        // Pan and Zoom engine
-        function setupCanvasPanZoom() {
-            const container = document.getElementById('app-container');
-
-            container.addEventListener('mousedown', (e) => {
-                if (e.target === container || e.target === canvas || e.target === document.getElementById('guide-grid')) {
-                    if (!editMode) {
-                        isPanning = true;
-                        startX = e.clientX - panX;
-                        startY = e.clientY - panY;
-                    }
-                }
-            });
-
-            window.addEventListener('mousemove', (e) => {
-                if (isPanning) {
-                    panX = e.clientX - startX;
-                    panY = e.clientY - startY;
-                    updateTransform();
-                }
-            });
-
-            window.addEventListener('mouseup', () => {
-                isPanning = false;
-            });
-
-            container.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                const zoomFactor = 1.1;
-                let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
-                newScale = Math.max(0.2, Math.min(3, newScale));
-                
-                const rect = container.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
-
-                panX = mouseX - (mouseX - panX) * (newScale / scale);
-                panY = mouseY - (mouseY - panY) * (newScale / scale);
-                scale = newScale;
-
-                updateTransform();
-            }, { passive: false });
-        }
-
-        // Render Archive Elements
-        function renderItems() {
-            canvas.innerHTML = '';
-            items.forEach(item => {
-                const el = document.createElement('div');
-                el.className = `archive-item ${item.type}`;
-                el.id = item.id;
-                el.style.left = `${item.x}px`;
-                el.style.top = `${item.y}px`;
-                el.style.width = `${item.w}px`;
-                el.style.height = `${item.h}px`;
-
-                el.innerHTML = `
-                    <div class="item-header">
-                        <input type="text" class="item-title" value="${item.title}" ${!editMode ? 'readonly' : ''}>
-                    </div>
-                    <div class="item-content">
-                        ${item.content.startsWith('http') || item.content.startsWith('data:') 
-                            ? `<img src="${item.content}" alt="Relic">` 
-                            : `<span>${item.content}</span>`}
-                    </div>
-                    <div class="resizer"></div>
-                `;
-
-                if (editMode) {
-                    setupDragAndResize(el, item);
-                }
-
-                el.addEventListener('contextmenu', (e) => {
-                    e.preventDefault();
-                    if (editMode) {
-                        activeCtxItem = item.id;
-                        contextMenu.style.display = 'flex';
-                        contextMenu.style.left = `${e.clientX}px`;
-                        contextMenu.style.top = `${e.clientY}px`;
-                    }
-                });
-
-                canvas.appendChild(el);
-            });
-        }
-
-        function setupDragAndResize(el, item) {
-            let isDragging = false;
-            let isResizing = false;
-            let startX, startY;
-            const snapSize = 40;
-
-            const header = el.querySelector('.item-header');
-            header.addEventListener('mousedown', (e) => {
-                if (!editMode || e.target.tagName === 'INPUT') return;
-                isDragging = true;
-                startX = e.clientX - item.x * scale;
-                startY = e.clientY - item.y * scale;
-                e.stopPropagation();
-            });
-
-            const resizer = el.querySelector('.resizer');
-            resizer.addEventListener('mousedown', (e) => {
-                if (!editMode) return;
-                isResizing = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                e.stopPropagation();
-            });
-
-            window.addEventListener('mousemove', (e) => {
-                if (!editMode) return;
-                if (isDragging) {
-                    let rawX = (e.clientX - startX) / scale;
-                    let rawY = (e.clientY - startY) / scale;
-                    item.x = Math.round(rawX / snapSize) * snapSize;
-                    item.y = Math.round(rawY / snapSize) * snapSize;
-                    el.style.left = `${item.x}px`;
-                    el.style.top = `${item.y}px`;
-                } else if (isResizing) {
-                    let rawW = item.w + (e.clientX - startX) / scale;
-                    let rawH = item.h + (e.clientY - startY) / scale;
-                    item.w = Math.max(120, Math.round(rawW / snapSize) * snapSize);
-                    item.h = Math.max(100, Math.round(rawH / snapSize) * snapSize);
-                    el.style.width = `${item.w}px`;
-                    el.style.height = `${item.h}px`;
-                    startX = e.clientX;
-                    startY = e.clientY;
-                }
-            });
-
-            window.addEventListener('mouseup', () => {
-                isDragging = false;
-                isResizing = false;
-            });
-        }
-
-        // Context Menu Actions
-        function ctxAction(action) {
-            contextMenu.style.display = 'none';
-            const item = items.find(i => i.id === activeCtxItem);
-            if (!item) return;
-
-            switch(action) {
-                case 'resizeOriginal':
-                    item.w = item.originalW || 220;
-                    item.h = item.originalH || 200;
-                    renderItems();
-                    break;
-                case 'changeImage':
-                    activeImageTarget = item.id;
-                    document.getElementById('hidden-file-input').click();
-                    break;
-                case 'rename':
-                    const el = document.getElementById(item.id).querySelector('.item-title');
-                    el.removeAttribute('readonly');
-                    el.focus();
-                    el.addEventListener('blur', () => {
-                        item.title = el.value;
-                        el.setAttribute('readonly', true);
-                    }, { once: true });
-                    break;
-                case 'moveToFolder':
-                    alert('Folder integration active.');
-                    break;
-                case 'openTab':
-                    const win = window.open();
-                    win.document.write(`<img src="${item.content}" style="max-width:100%;">`);
-                    break;
-                case 'delete':
-                    pendingDeleteId = item.id;
-                    document.getElementById('modal-text').textContent = `Are you sure you want to delete "${item.title}"?`;
-                    document.getElementById('modal-overlay').style.display = 'flex';
-                    break;
-            }
-        }
-
-        function handleImageUpload(e) {
-            const file = e.target.files[0];
-            if (file && activeImageTarget) {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    const item = items.find(i => i.id === activeImageTarget);
-                    if (item) {
-                        item.content = event.target.result;
-                        renderItems();
-                    }
-                };
-                reader.readAsDataURL(file);
-            }
-        }
-
-        function confirmAction(confirm) {
-            document.getElementById('modal-overlay').style.display = 'none';
-            if (confirm && pendingDeleteId) {
-                items = items.filter(i => i.id !== pendingDeleteId);
-                renderItems();
-            }
-            pendingDeleteId = null;
-        }
-
-        // Add options
-        function addRelic() {
-            const newId = 'relic-' + Date.now();
-            items.push({
-                id: newId,
-                type: 'relic',
-                title: 'New Relic',
-                x: Math.round(-panX / scale + window.innerWidth / (2 * scale)),
-                y: Math.round(-panY / scale + window.innerHeight / (2 * scale)),
-                w: 220,
-                h: 200,
-                content: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=400&q=80',
-                originalW: 220,
-                originalH: 200
-            });
-            renderItems();
-        }
-
-        function addFolder() {
-            const newId = 'folder-' + Date.now();
-            items.push({
-                id: newId,
-                type: 'folder',
-                title: 'Crypt Folder',
-                x: Math.round(-panX / scale + window.innerWidth / (2 * scale)),
-                y: Math.round(-panY / scale + window.innerHeight / (2 * scale)),
-                w: 240,
-                h: 180,
-                content: 'Empty Archive',
-                originalW: 240,
-                originalH: 180
-            });
-            renderItems();
-        }
-
-        function saveArchive() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(items));
-            const dlAnchor = document.createElement('a');
-            dlAnchor.setAttribute("href", dataStr);
-            dlAnchor.setAttribute("download", "gothic_archive.json");
-            document.body.appendChild(dlAnchor);
-            dlAnchor.click();
-            dlAnchor.remove();
-        }
-
-        function loadArchiveModal() {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.json';
-            input.onchange = e => {
-                const file = e.target.files[0];
-                const reader = new FileReader();
-                reader.readAsText(file, 'UTF-8');
-                reader.onload = readerEvent => {
-                    try {
-                        items = JSON.parse(readerEvent.target.result);
-                        renderItems();
-                    } catch(err) {
-                        alert('Invalid archive file.');
-                    }
-                }
-            };
-            input.click();
-        }
-
-        window.addEventListener('click', (e) => {
-            if (!contextMenu.contains(e.target)) {
-                contextMenu.style.display = 'none';
-            }
+    async function loadData() {
+      const db = await openDB();
+      if (db) {
+        state.folders = await new Promise(res => {
+          const tx = db.transaction('folders', 'readonly');
+          const req = tx.objectStore('folders').getAll();
+          req.onsuccess = () => res(req.result || []);
         });
+        state.files = await new Promise(res => {
+          const tx = db.transaction('files', 'readonly');
+          const req = tx.objectStore('files').getAll();
+          req.onsuccess = () => res(req.result || []);
+        });
+      }
 
-        window.onload = init;
-    </script>
+      for (let file of state.files) {
+        if (file.dataUrl && (file.fileType?.startsWith('video/') || file.fileType?.startsWith('audio/'))) {
+          await getOrCreateBlobUrl(file);
+        }
+      }
+
+      if (state.folders.length === 0) {
+        const root = { id: 'root', name: 'Aiden Files', parentId: null, width: 96, height: 96 };
+        state.folders = [root];
+        saveFolder(root);
+      }
+      render();
+    }
+
+    async function saveFolder(folder) {
+      const db = await openDB();
+      if (db) {
+        const tx = db.transaction('folders', 'readwrite');
+        tx.objectStore('folders').put(folder);
+      }
+    }
+
+    async function saveFile(file) {
+      const db = await openDB();
+      if (db) {
+        const tx = db.transaction('files', 'readwrite');
+        const fileToSave = { ...file };
+        delete fileToSave.blobUrl;
+        tx.objectStore('files').put(fileToSave);
+      }
+    }
+
+    async function deleteFromDB(storeName, id) {
+      const db = await openDB();
+      if (db) {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).delete(id);
+      }
+    }
+
+    // --- TOKEN & GITHUB SYNC ---
+    function resetToken() {
+      const token = prompt('Enter your GitHub Personal Access Token (make sure Contents permission is set to Read and write):', state.ghToken);
+      if (token !== null) {
+        state.ghToken = token.trim();
+        localStorage.setItem('af_gh_token', state.ghToken);
+        alert('New token saved successfully!');
+        syncWithGitHub();
+      }
+    }
+
+    async function syncWithGitHub(forcePull = false) {
+      if (!state.ghToken) {
+        resetToken();
+        if (!state.ghToken) return;
+      }
+
+      state.isSyncing = true;
+      render();
+
+      try {
+        const url = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/${CONFIG.ghPath}`;
+        const authHeader = state.ghToken.startsWith('ghp_') || state.ghToken.startsWith('gho_') 
+          ? `token ${state.ghToken}` 
+          : `Bearer ${state.ghToken}`;
+
+        const headers = {
+          'Authorization': authHeader,
+          'Accept': 'application/vnd.github.v3+json',
+          'X-GitHub-Api-Version': '2022-11-28'
+        };
+
+        let sha = null;
+        const getRes = await fetch(url, { headers });
+        
+        if (getRes.status === 401 || getRes.status === 403) {
+          throw new Error('Authentication failed or Insufficient permissions (401/403). Ensure token has Contents: Read and write.');
+        }
+
+        if (getRes.ok) {
+          const getJson = await getRes.json();
+          sha = getJson.sha;
+          
+          if (forcePull || (state.files.length === 0 && state.folders.length <= 1)) {
+            const remoteContent = JSON.parse(decodeURIComponent(escape(atob(getJson.content))));
+            state.folders = remoteContent.folders || state.folders;
+            state.files = remoteContent.files || state.files;
+
+            for (let file of state.files) {
+              if (file.dataUrl && (file.fileType?.startsWith('video/') || file.fileType?.startsWith('audio/'))) {
+                await getOrCreateBlobUrl(file);
+              }
+            }
+
+            for (let f of state.folders) await saveFolder(f);
+            for (let fi of state.files) await saveFile(fi);
+            alert('Synced data down from Cloud!');
+            state.isSyncing = false;
+            render();
+            return;
+          }
+        }
+
+        const jsonString = JSON.stringify({ folders: state.folders, files: state.files });
+        
+        if (jsonString.length > 95 * 1024 * 1024) {
+          throw new Error('Data payload exceeds GitHub API absolute limit (~100MB). Please offload or delete some large media files.');
+        }
+
+        const payload = {
+          message: 'Sync Aiden Files Data',
+          content: btoa(unescape(encodeURIComponent(jsonString))),
+          ...(sha && { sha })
+        };
+
+        const putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(payload) });
+        if (putRes.ok) {
+          alert('Sync Successful! Cloud backup updated.');
+        } else {
+          const errData = await putRes.json().catch(() => ({}));
+          throw new Error(errData.message || `GitHub returned status ${putRes.status}`);
+        }
+      } catch (err) {
+        alert('Sync error: ' + err.message);
+      } finally {
+        state.isSyncing = false;
+        render();
+      }
+    }
+
+    // --- RENDER & UI ---
+    function render() {
+      const app = document.getElementById('app');
+      const currentFolder = state.folders.find(f => f.id === state.currentFolderId);
+      const childrenFolders = state.folders.filter(f => f.parentId === state.currentFolderId && f.id !== 'root');
+      const childrenFiles = state.files.filter(f => f.parentId === state.currentFolderId);
+      const items = [...childrenFolders, ...childrenFiles];
+      const allChildrenSelected = items.length > 0 && items.every(item => state.selectedIds.includes(item.id));
+
+      if (state.editMode) {
+        document.body.classList.add('edit-mode');
+      } else {
+        document.body.classList.remove('edit-mode');
+      }
+
+      app.innerHTML = `
+        <header class="shrink-0 z-35 bg-black/95 backdrop-blur-lg border-b border-zinc-900 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button onclick="syncWithGitHub()" class="px-2.5 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-bold text-zinc-300 flex items-center gap-1.5 shadow-sm">
+              <i data-lucide="${state.isSyncing ? 'refresh-cw' : 'cloud'}" class="w-3.5 h-3.5 ${state.isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-400'}"></i>
+              <span class="hidden sm:inline">${state.isSyncing ? 'Syncing...' : 'Sync'}</span>
+            </button>
+            <button onclick="resetToken()" title="Update GitHub token" class="p-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-zinc-400 hover:text-zinc-200">
+              <i data-lucide="key" class="w-3.5 h-3.5"></i>
+            </button>
+            <button onclick="forcePullCloudData()" title="Force Pull from Cloud" class="px-2.5 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-bold text-amber-400 flex items-center gap-1.5 shadow-sm">
+              <i data-lucide="download-cloud" class="w-3.5 h-3.5"></i>
+              <span class="hidden sm:inline">Pull Cloud</span>
+            </button>
+            <button onclick="navigateTo(null)" class="px-3 py-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md">
+              <i data-lucide="home" class="w-4 h-4 text-amber-400"></i> Home
+            </button>
+            <button onclick="openNewFolderModal()" class="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-zinc-700/60 shadow-sm cursor-pointer">
+              <i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i> New Folder
+            </button>
+            <button onclick="openUploadModal()" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer">
+              <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i> Add Item
+            </button>
+          </div>
+
+          <div class="flex items-center gap-1 text-xs text-zinc-400 truncate px-2 shrink">
+            <span onclick="navigateTo(null)" class="cursor-pointer hover:text-white">Home</span>
+            ${currentFolder ? `<span class="text-zinc-600">/</span><span class="text-white font-semibold truncate">${currentFolder.name}</span>` : ''}
+          </div>
+
+          <div class="flex items-center gap-1.5 shrink-0">
+            ${state.selectMode ? `
+              <button onclick="toggleSelectAll()" class="px-2.5 py-2 bg-indigo-950 border border-indigo-700 rounded-xl text-xs font-bold text-indigo-300 flex items-center gap-1 shadow-sm">
+                <i data-lucide="${allChildrenSelected ? 'check-square' : 'square'}" class="w-3.5 h-3.5"></i>
+                ${allChildrenSelected ? 'Deselect All' : 'Select All'}
+              </button>
+            ` : ''}
+            <button onclick="toggleSelectMode()" class="px-3 py-2 rounded-xl text-xs font-bold border ${state.selectMode ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}">
+              ${state.selectMode ? 'Cancel' : 'Select'}
+            </button>
+            <button onclick="toggleEditMode()" class="px-3 py-2 rounded-xl text-xs font-bold border ${state.editMode ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}">
+              ${state.editMode ? 'Edit Mode On' : 'Edit Mode Locked'}
+            </button>
+          </div>
+        </header>
+
+        <main onclick="closeMenu()" class="flex-1 relative w-full h-full overflow-auto ${state.editMode ? 'edit-grid-bg' : ''}">
+          ${items.length === 0 ? `
+            <div class="flex flex-col items-center justify-center h-full text-center p-6 text-zinc-500 text-sm gap-3">
+              <span>Folder is empty</span>
+              <button onclick="forcePullCloudData()" class="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-xl text-xs text-amber-400 font-bold flex items-center gap-2">
+                <i data-lucide="download-cloud" class="w-4 h-4"></i> Restore / Sync from Cloud Backup
+              </button>
+            </div>
+          ` : `
+            <div class="relative min-w-[1200px] min-h-[1200px] p-4">
+              ${items.map((item, index) => renderItem(item, index)).join('')}
+            </div>
+          `}
+        </main>
+
+        ${state.selectMode && state.selectedIds.length > 0 ? `
+          <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-zinc-900/95 border border-zinc-700 backdrop-blur-xl px-6 py-3.5 rounded-2xl shadow-2xl z-40 flex items-center gap-5">
+            <span class="text-xs font-bold text-zinc-300">${state.selectedIds.length} Selected</span>
+            <div class="h-4 w-px bg-zinc-800"></div>
+            <button onclick="bulkCopy()" class="flex items-center gap-1.5 text-xs text-zinc-200 hover:text-amber-400 font-bold"><i data-lucide="copy" class="w-4 h-4"></i> Copy to Clipboard</button>
+            <button onclick="bulkMove()" class="flex items-center gap-1.5 text-xs text-zinc-200 hover:text-amber-400 font-bold"><i data-lucide="folder-output" class="w-4 h-4"></i> Move</button>
+            <button onclick="bulkShare()" class="flex items-center gap-1.5 text-xs text-zinc-200 hover:text-amber-400 font-bold"><i data-lucide="share" class="w-4 h-4"></i> iOS Share</button>
+            <button onclick="bulkDelete()" class="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 font-bold"><i data-lucide="trash-2" class="w-4 h-4"></i> Delete</button>
+          </div>
+        ` : ''}
+
+        ${state.showUploadModal ? renderUploadModal() : ''}
+        ${state.quickViewFileId ? renderQuickViewModal() : ''}
+      `;
+
+      if (window.lucide) window.lucide.createIcons();
+      attachDragAndResizeListeners();
+    }
+
+    function getFileIcon(type, name) {
+      if (type.startsWith('video/')) return 'video';
+      if (type.startsWith('audio/')) return 'music';
+      if (type === 'application/pdf' || name.endsWith('.pdf')) return 'file-text';
+      if (type.startsWith('text/') || name.endsWith('.txt')) return 'file-text';
+      return 'file';
+    }
+
+    function renderItem(item, index) {
+      const col = index % 4;
+      const row = Math.floor(index / 4);
+      const posX = item.x !== undefined ? item.x : (20 + col * 140);
+      const posY = item.y !== undefined ? item.y : (20 + row * 160);
+      const itemWidth = item.width || (isFolder(item) ? 96 : 112);
+      const itemHeight = item.height || (isFolder(item) ? 96 : 128);
+      const folder = isFolder(item);
+      const isMenuOpen = state.activeMenuId === item.id;
+      const isSelected = state.selectedIds.includes(item.id);
+
+      if (folder) {
+        return `
+          <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute flex flex-col items-center cursor-pointer touch-none" onclick="handleItemClick(event, '${item.id}', true)">
+            <div class="folder-cube bg-gradient-to-b from-zinc-800 to-zinc-950 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-zinc-700/60'} flex flex-col items-center justify-center relative overflow-hidden group">
+              ${item.coverUrl ? `<img src="${item.coverUrl}" class="w-full h-full object-cover rounded-[20px] pointer-events-none" />` : `<i data-lucide="folder" class="w-10 h-10 text-amber-400 fill-amber-400/20 stroke-[1.5] pointer-events-none"></i>`}
+              ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
+              <button type="button" onclick="toggleMenu(event, '${item.id}')" class="absolute top-1.5 right-1.5 p-2 bg-black/70 hover:bg-black rounded-full text-zinc-200 z-45 cursor-pointer shadow-md"><i data-lucide="more-vertical" class="w-4 h-4 pointer-events-none"></i></button>
+            </div>
+            <span class="text-[11px] font-medium text-zinc-300 max-w-full truncate text-center mt-1.5 pointer-events-none">${item.name}</span>
+            <div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>
+            ${isMenuOpen ? renderContextMenu(item, true) : ''}
+          </div>
+        `;
+      } else {
+        const type = item.fileType || '';
+        const isImage = type.startsWith('image/');
+        const imgSrc = item.dataUrl || item.thumbnailData;
+        const icon = getFileIcon(type, item.name);
+
+        return `
+          <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute bg-zinc-900 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : (state.editMode ? 'border-yellow-500/60 touch-none' : 'border-zinc-800')} rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg cursor-pointer" onclick="handleItemClick(event, '${item.id}', false)">
+            <div class="flex-1 bg-zinc-950 relative overflow-hidden flex items-center justify-center rounded-t-2xl">
+              ${isImage && imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover rounded-xl pointer-events-none" alt="${item.name}" />` : `
+                <div class="flex flex-col items-center gap-1 text-zinc-400">
+                  <i data-lucide="${icon}" class="w-8 h-8 text-amber-400 pointer-events-none"></i>
+                  ${type.startsWith('video/') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Video</span>' : ''}
+                  ${type.startsWith('audio/') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-zinc-500">Audio</span>' : ''}
+                  ${type === 'application/pdf' || item.name.endsWith('.pdf') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-red-400">PDF</span>' : ''}
+                  ${type.startsWith('text/') || item.name.endsWith('.txt') ? '<span class="text-[9px] uppercase font-bold tracking-wider text-amber-400">TXT</span>' : ''}
+                </div>
+              `}
+              ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
+              <button type="button" onclick="toggleMenu(event, '${item.id}')" class="absolute top-1.5 right-1.5 p-2 bg-black/70 hover:bg-black rounded-full text-zinc-200 backdrop-blur-sm z-45 cursor-pointer shadow-md"><i data-lucide="more-vertical" class="w-4 h-4 pointer-events-none"></i></button>
+            </div>
+            <div class="p-1.5 bg-zinc-900 flex items-center justify-between border-t border-zinc-800 rounded-b-2xl pointer-events-none">
+              <span class="text-[10px] font-medium text-zinc-200 truncate flex-1">${item.name}</span>
+            </div>
+            <div class="resize-handle absolute bottom-0 right-0 bg-yellow-500 rounded-tl-xl cursor-se-resize flex items-center justify-center z-20 shadow-md"><i data-lucide="arrow-down-right" class="w-3 h-3 text-black stroke-[3]"></i></div>
+            ${isMenuOpen ? renderContextMenu(item, false) : ''}
+          </div>
+        `;
+      }
+    }
+
+    function renderContextMenu(item, isFolderItem) {
+      return `
+        <div onclick="event.stopPropagation()" class="absolute left-full top-0 ml-2 w-48 bg-zinc-950/98 border border-zinc-700/90 rounded-xl shadow-2xl backdrop-blur-xl z-50 overflow-hidden text-xs py-1">
+          ${isFolderItem ? `
+            <button type="button" onclick="triggerFolderCover('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Change cover image</button>
+            <button type="button" onclick="renameItem('${item.id}', true)" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="edit-3" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Rename</button>
+            <button type="button" onclick="moveToFolder('${item.id}', true)" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="folder-output" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Move to folder</button>
+            <button type="button" onclick="snapToOriginalShape('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Snap to original shape</button>
+            <div class="h-px bg-zinc-800 my-1"></div>
+            <button type="button" onclick="deleteItemConfirm('${item.id}', true)" class="w-full px-3 py-2 text-left hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium cursor-pointer"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400 pointer-events-none"></i> Delete with confirmation</button>
+          ` : `
+            <button type="button" onclick="openQuickView('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="eye" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Quick Look</button>
+            <button type="button" onclick="copySingleFileClipboard('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="copy" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Copy to Clipboard</button>
+            <button type="button" onclick="shareFile('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="share" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> iOS Share</button>
+            <button type="button" onclick="triggerChangeImage('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="image" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Change Image</button>
+            <button type="button" onclick="renameItem('${item.id}', false)" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="edit-3" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Rename</button>
+            <button type="button" onclick="moveToFolder('${item.id}', false)" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="folder-output" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Move to folder</button>
+            <button type="button" onclick="resizeByFinger('${item.id}', false)" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="maximize-2" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Resize by finger</button>
+            <button type="button" onclick="snapToOriginalShape('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200 cursor-pointer"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400 pointer-events-none"></i> Snap to original shape</button>
+            <div class="h-px bg-zinc-800 my-1"></div>
+            <button type="button" onclick="deleteItemConfirm('${item.id}', false)" class="w-full px-3 py-2 text-left hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium cursor-pointer"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400 pointer-events-none"></i> Delete with confirmation</button>
+          `}
+        </div>
+      `;
+    }
+
+    function renderUploadModal() {
+      return `
+        <div class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" onclick="closeUploadModal()">
+          <div class="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm flex flex-col gap-4 text-center shadow-2xl" onclick="event.stopPropagation()">
+            <h3 class="text-lg font-bold text-white">Add Item</h3>
+            <p class="text-xs text-zinc-400">Where do you want to upload your files from?</p>
+            <div class="flex flex-col gap-2.5 mt-2">
+              <button onclick="document.getElementById('file-input').click(); closeUploadModal();" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2"><i data-lucide="file" class="w-4 h-4 text-amber-400"></i> Files App</button>
+              <button onclick="document.getElementById('photo-input').click(); closeUploadModal();" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2"><i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Photos, Audio & Videos</button>
+              <button onclick="openNewFolderModal(); closeUploadModal();" class="w-full py-3 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2 border border-zinc-700/50"><i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i> New Folder</button>
+            </div>
+            <button onclick="closeUploadModal()" class="text-xs text-zinc-500 hover:text-zinc-300 mt-2 font-medium">Cancel</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderQuickViewContent(file) {
+      const type = file.fileType || '';
+      const mediaUrl = file.blobUrl || file.dataUrl;
+      
+      if (type.startsWith('image/')) return `<img src="${file.dataUrl}" class="max-w-[90vw] max-h-[75vh] w-auto h-auto object-contain rounded-2xl shadow-2xl" />`;
+      if (type.startsWith('video/')) return `<video controls playsinline autoplay class="max-w-[90vw] max-h-[75vh] w-auto h-auto object-contain rounded-2xl shadow-2xl bg-black" src="${mediaUrl}"></video>`;
+      if (type.startsWith('audio/')) {
+        return `
+          <div class="flex flex-col items-center gap-6 p-8 bg-zinc-900 border border-zinc-800 rounded-3xl max-w-sm w-full shadow-2xl text-center">
+            <div class="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-400"><i data-lucide="music" class="w-10 h-10"></i></div>
+            <span class="text-sm font-semibold text-zinc-200 max-w-full truncate">${file.name}</span>
+            <audio controls playsinline autoplay class="w-full" src="${mediaUrl}"></audio>
+          </div>
+        `;
+      }
+      if (type === 'application/pdf' || file.name.endsWith('.pdf')) return `<iframe src="${file.dataUrl}" class="w-[90vw] h-[75vh] rounded-2xl border border-zinc-800 bg-white"></iframe>`;
+      if (type.startsWith('text/') || file.name.endsWith('.txt')) return `<div class="w-[90vw] h-[75vh] max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl p-4 overflow-auto text-xs font-mono text-zinc-300 whitespace-pre-wrap select-text">${file.textContent || ''}</div>`;
+      return `<div class="flex flex-col items-center gap-3 text-zinc-500"><i data-lucide="file-text" class="w-16 h-16"></i><span class="text-xs text-zinc-400">${file.name}</span></div>`;
+    }
+
+    function renderQuickViewModal() {
+      const file = state.files.find(f => f.id === state.quickViewFileId);
+      if (!file) return '';
+      return `
+        <div class="fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col justify-between p-4" onclick="closeQuickView()">
+          <div class="flex items-center justify-between text-zinc-300 pt-2 px-4 shrink-0" onclick="event.stopPropagation()">
+            <span class="text-sm font-semibold truncate max-w-[200px]">${file.name}</span>
+            <button onclick="closeQuickView()" class="p-2 bg-zinc-900 border border-zinc-800 rounded-full hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+          </div>
+          <div class="flex-1 flex items-center justify-center overflow-hidden my-2 px-2" onclick="event.stopPropagation()">${renderQuickViewContent(file)}</div>
+          <div class="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-3 flex items-center justify-center gap-8 text-xs font-semibold text-zinc-200 shrink-0" onclick="event.stopPropagation()">
+            <button onclick="copySingleFileClipboard('${file.id}')" class="flex flex-col items-center gap-1 hover:text-amber-400"><i data-lucide="copy" class="w-5 h-5"></i> Copy</button>
+            <button onclick="moveToFolder('${file.id}', false); closeQuickView();" class="flex flex-col items-center gap-1 hover:text-amber-400"><i data-lucide="folder-output" class="w-5 h-5"></i> Move</button>
+            <button onclick="shareFile('${file.id}')" class="flex flex-col items-center gap-1 hover:text-amber-400"><i data-lucide="share" class="w-5 h-5"></i> Share</button>
+            <button onclick="deleteItemConfirm('${file.id}', false); closeQuickView();" class="flex flex-col items-center gap-1 text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-5 h-5"></i> Delete</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleSelectMode() { state.selectMode = !state.selectMode; state.selectedIds = []; closeMenu(); render(); }
+    function toggleSelectAll() {
+      const items = [...state.folders.filter(f => f.parentId === state.currentFolderId && f.id !== 'root'), ...state.files.filter(f => f.parentId === state.currentFolderId)];
+      const allSelected = items.length > 0 && items.every(item => state.selectedIds.includes(item.id));
+      state.selectedIds = allSelected ? [] : items.map(item => item.id);
+      render();
+    }
+
+    function handleItemClick(e, id, isFolderItem) {
+      if (state.selectMode) {
+        state.selectedIds = state.selectedIds.includes(id) ? state.selectedIds.filter(i => i !== id) : [...state.selectedIds, id];
+        render();
+        return;
+      }
+      if (isFolderItem) navigateTo(id); else openQuickView(id);
+    }
+
+    function openUploadModal() { state.showUploadModal = true; render(); }
+    function closeUploadModal() { state.showUploadModal = false; render(); }
+    function openQuickView(id) { state.quickViewFileId = id; closeMenu(); render(); }
+    function closeQuickView() { state.quickViewFileId = null; render(); }
+    function navigateTo(id) { state.currentFolderId = id; closeMenu(); render(); }
+    function toggleEditMode() { 
+      state.editMode = !state.editMode; 
+      closeMenu(); 
+      render(); 
+    }
+    function toggleMenu(e, id) {
+      e.stopPropagation();
+      state.activeMenuId = state.activeMenuId === id ? null : id;
+      render();
+    }
+    function closeMenu() { if (state.activeMenuId) { state.activeMenuId = null; render(); } }
+    function forcePullCloudData() { syncWithGitHub(true); }
+
+    async function bulkDelete() {
+      if (!confirm(`Are you sure you want to delete ${state.selectedIds.length} items?`)) return;
+      for (let id of state.selectedIds) {
+        state.folders = state.folders.filter(f => f.id !== id);
+        state.files = state.files.filter(f => f.id !== id);
+        await deleteFromDB('folders', id);
+        await deleteFromDB('files', id);
+      }
+      state.selectedIds = [];
+      render();
+    }
+
+    async function bulkMove() {
+      const targetFolders = state.folders.filter(f => !state.selectedIds.includes(f.id));
+      const targetId = prompt("Enter destination folder ID or 'root':\n" + targetFolders.map(f => `- ${f.name} (${f.id})`).join('\n'), 'root');
+      if (targetId) {
+        const actualParent = targetId === 'root' ? null : targetId;
+        for (let id of state.selectedIds) {
+          let f = state.folders.find(item => item.id === id);
+          let fi = state.files.find(item => item.id === id);
+          if (f) { f.parentId = actualParent; await saveFolder(f); }
+          if (fi) { fi.parentId = actualParent; await saveFile(fi); }
+        }
+        state.selectedIds = [];
+        render();
+      }
+    }
+
+    async function bulkCopy() {
+      for (let id of state.selectedIds) {
+        let file = state.files.find(f => f.id === id);
+        if (file) {
+          const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
+          delete newFile.x; delete newFile.y; delete newFile.blobUrl;
+          if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) await getOrCreateBlobUrl(newFile);
+          state.files.push(newFile);
+          await saveFile(newFile);
+        }
+      }
+      alert(`Successfully copied ${state.selectedIds.length} items to clipboard / internal storage!`);
+      state.selectedIds = [];
+      render();
+    }
+
+    async function bulkShare() {
+      for (let id of state.selectedIds) {
+        await shareFile(id, true);
+      }
+    }
+
+    async function copySingleFileClipboard(id) {
+      const file = state.files.find(f => f.id === id);
+      if (!file) return;
+      
+      try {
+        if (file.dataUrl && navigator.clipboard && window.ClipboardItem) {
+          const res = await fetch(file.dataUrl);
+          const blob = await res.blob();
+          await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+          alert('File copied to clipboard successfully!');
+          closeMenu();
+          render();
+          return;
+        }
+        if (file.textContent && navigator.clipboard) {
+          await navigator.clipboard.writeText(file.textContent);
+          alert('Text content copied to clipboard successfully!');
+          closeMenu();
+          render();
+          return;
+        }
+      } catch (e) {
+        console.warn('Direct clipboard API restricted, falling back to data duplicate', e);
+      }
+
+      const newFile = { ...file, id: uid(), name: file.name + ' (Copy)' };
+      delete newFile.x; delete newFile.y; delete newFile.blobUrl;
+      if (newFile.fileType?.startsWith('video/') || newFile.fileType?.startsWith('audio/')) {
+        await getOrCreateBlobUrl(newFile);
+      }
+      state.files.push(newFile);
+      await saveFile(newFile);
+      alert('Copied file successfully inside Aiden Files!');
+      closeMenu();
+      render();
+    }
+
+    async function shareFile(id, isBulk = false) {
+      const file = state.files.find(f => f.id === id);
+      if (!file) return;
+      if (navigator.canShare && file.dataUrl) {
+        try {
+          const res = await fetch(file.dataUrl);
+          const blob = await res.blob();
+          const nativeFile = new File([blob], file.name, { type: file.fileType || blob.type });
+          if (navigator.canShare({ files: [nativeFile] })) {
+            await navigator.share({ files: [nativeFile], title: file.name });
+            if (!isBulk) closeMenu();
+            return;
+          }
+        } catch (e) {}
+      }
+      if (navigator.share) await navigator.share({ title: file.name, text: file.name, url: file.dataUrl });
+      else if (!isBulk) alert('Sharing is not supported on this device.');
+      if (!isBulk) closeMenu();
+    }
+
+    function triggerFolderCover(id) { state.targetFolderCoverId = id; document.getElementById('folder-cover-input').click(); closeMenu(); }
+    document.getElementById('folder-cover-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file && state.targetFolderCoverId) {
+        const base64 = await fileToBase64(file);
+        const folder = state.folders.find(f => f.id === state.targetFolderCoverId);
+        if (folder) { folder.coverUrl = base64; await saveFolder(folder); render(); }
+      }
+    });
+
+    function triggerChangeImage(id) { state.targetChangeImageId = id; document.getElementById('change-image-input').click(); closeMenu(); }
+    document.getElementById('change-image-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file && state.targetChangeImageId) {
+        const base64 = await fileToBase64(file);
+        const item = state.files.find(f => f.id === state.targetChangeImageId);
+        if (item) {
+          item.dataUrl = base64;
+          if (item.fileType?.startsWith('video/') || item.fileType?.startsWith('audio/')) { item.blobUrl = ''; await getOrCreateBlobUrl(item); }
+          await saveFile(item);
+          render();
+        }
+      }
+    });
+
+    async function renameItem(id, isFolderItem) {
+      const item = isFolderItem ? state.folders.find(f => f.id === id) : state.files.find(f => f.id === id);
+      if (item) {
+        const newName = prompt('Rename item:', item.name);
+        if (newName && newName.trim() !== '') {
+          item.name = newName.trim();
+          if (isFolderItem) await saveFolder(item); else await saveFile(item);
+          closeMenu();
+          render();
+        }
+      }
+    }
+
+    async function moveToFolder(id, isFolderItem) {
+      const targetFolders = state.folders.filter(f => f.id !== id);
+      const targetId = prompt("Enter destination folder ID or 'root':\n" + targetFolders.map(f => `- ${f.name} (${f.id})`).join('\n'), 'root');
+      if (targetId) {
+        const actualParent = targetId === 'root' ? null : targetId;
+        const item = isFolderItem ? state.folders.find(f => f.id === id) : state.files.find(f => f.id === id);
+        if (item) {
+          item.parentId = actualParent; delete item.x; delete item.y;
+          if (isFolderItem) await saveFolder(item); else await saveFile(item);
+          closeMenu(); render();
+        }
+      }
+    }
+
+    function resizeByFinger(id, isFolderItem) {
+      const el = document.getElementById(`item-${id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const handle = el.querySelector('.resize-handle');
+        if (handle) {
+          handle.classList.add('ring-4', 'ring-amber-400');
+          setTimeout(() => handle.classList.remove('ring-4', 'ring-amber-400'), 1500);
+        }
+      }
+      closeMenu();
+    }
+
+    async function snapToOriginalShape(id) {
+      const item = state.folders.find(f => f.id === id) || state.files.find(f => f.id === id);
+      if (item) {
+        item.width = isFolder(item) ? 96 : 112;
+        item.height = isFolder(item) ? 96 : 128;
+        if (isFolder(item)) await saveFolder(item); else await saveFile(item);
+        closeMenu(); render();
+      }
+    }
+
+    async function deleteItemConfirm(id, isFolderItem) {
+      if (!confirm('Are you sure you want to delete this item?')) return;
+      if (isFolderItem) {
+        state.folders = state.folders.filter(f => f.id !== id);
+        await deleteFromDB('folders', id);
+      } else {
+        state.files = state.files.filter(f => f.id !== id);
+        await deleteFromDB('files', id);
+      }
+      closeMenu();
+      render();
+    }
+
+    function openNewFolderModal() {
+      const name = prompt('Folder Name:', 'New Folder');
+      if (name && name.trim() !== '') {
+        const folder = { id: uid(), name: name.trim(), parentId: state.currentFolderId, width: 96, height: 96 };
+        state.folders.push(folder);
+        saveFolder(folder);
+        render();
+      }
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function fileToText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+        reader.readAsText(file);
+      });
+    }
+
+    function getMimeType(file) {
+      if (file.type && file.type !== '') return file.type;
+      const ext = file.name.split('.').pop().toLowerCase();
+      const mimeMap = {'mp3': 'audio/mpeg', 'm4a': 'audio/mp4', 'mp4': 'video/mp4', 'mov': 'video/quicktime', 'pdf': 'application/pdf', 'txt': 'text/plain'};
+      return mimeMap[ext] || 'application/octet-stream';
+    }
+
+    async function handleFileImport(files) {
+      for (const file of Array.from(files)) {
+        let dataUrl = await fileToBase64(file);
+        let textContent = null;
+        let inferredType = getMimeType(file);
+        let blobUrl = '';
+
+        if (inferredType.startsWith('video/') || inferredType.startsWith('audio/')) blobUrl = URL.createObjectURL(file);
+        else if (inferredType.startsWith('text/') || file.name.endsWith('.txt')) {
+          try { textContent = await fileToText(file); } catch (e) {}
+        }
+
+        const item = {
+          id: uid(),
+          name: file.name,
+          fileType: inferredType,
+          size: file.size,
+          dataUrl: dataUrl,
+          blobUrl: blobUrl,
+          textContent: textContent,
+          parentId: state.currentFolderId,
+          width: 112,
+          height: 128
+        };
+
+        state.files.push(item);
+        await saveFile(item);
+      }
+      render();
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => handleFileImport(e.target.files));
+    document.getElementById('photo-input').addEventListener('change', (e) => handleFileImport(e.target.files));
+
+    function attachDragAndResizeListeners() {
+      const elements = document.querySelectorAll('[data-id]');
+      elements.forEach(el => {
+        let activeDrag = false, activeResize = false;
+        let startX, startY, origX, origY, origW, origH;
+        const resizeHandle = el.querySelector('.resize-handle');
+
+        const onStart = (e) => {
+          if (!state.editMode) return;
+          if (e.target.closest('button')) return;
+          const touch = e.touches ? e.touches[0] : e;
+          startX = touch.clientX; startY = touch.clientY;
+          if (e.target === resizeHandle || resizeHandle?.contains(e.target)) {
+            activeResize = true; origW = el.offsetWidth; origH = el.offsetHeight;
+          } else {
+            activeDrag = true; origX = parseInt(el.style.left) || 0; origY = parseInt(el.style.top) || 0;
+          }
+        };
+
+        const onMove = (e) => {
+          if (!state.editMode || (!activeDrag && !activeResize)) return;
+          const touch = e.touches ? e.touches[0] : e;
+          const dx = touch.clientX - startX, dy = touch.clientY - startY;
+          if (activeDrag) {
+            el.style.left = `${Math.round(Math.max(8, origX + dx) / CONFIG.GRID_SIZE) * CONFIG.GRID_SIZE}px`;
+            el.style.top = `${Math.round(Math.max(8, origY + dy) / CONFIG.GRID_SIZE) * CONFIG.GRID_SIZE}px`;
+          } else if (activeResize) {
+            el.style.width = `${Math.max(64, origW + dx)}px`;
+            el.style.height = `${Math.max(64, origH + dy)}px`;
+          }
+        };
+
+        const onEnd = () => {
+          if (!activeDrag && !activeResize) return;
+          const target = state.folders.find(f => f.id === el.getAttribute('data-id')) || state.files.find(f => f.id === el.getAttribute('data-id'));
+          if (target) {
+            if (activeDrag) { target.x = parseInt(el.style.left); target.y = parseInt(el.style.top); }
+            if (activeResize) { target.width = parseInt(el.style.width); target.height = parseInt(el.style.height); }
+            if (isFolder(target)) saveFolder(target); else saveFile(target);
+          }
+          activeDrag = false; activeResize = false;
+          window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onEnd);
+        };
+
+        el.addEventListener('mousedown', onStart);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onEnd);
+        el.addEventListener('touchstart', onStart, { passive: true });
+        window.addEventListener('touchmove', onMove, { passive: true });
+        window.addEventListener('touchend', onEnd);
+      });
+    }
+
+    loadData();
+    
+    setTimeout(() => {
+      if (state.files.length === 0 && state.folders.length <= 1 && state.ghToken) {
+        syncWithGitHub(true);
+      }
+    }, 500);
+  </script>
 </body>
 </html>
