@@ -124,7 +124,6 @@
         });
       }
 
-      // Pre-generate blob URLs for audio/video files
       for (let file of state.files) {
         if (file.dataUrl && (file.fileType?.startsWith('video/') || file.fileType?.startsWith('audio/'))) {
           await getOrCreateBlobUrl(file);
@@ -167,17 +166,19 @@
 
     // --- TOKEN MANAGEMENT & GITHUB SYNC ---
     function resetToken() {
-      localStorage.removeItem('af_gh_token');
-      state.ghToken = '';
-      syncWithGitHub();
+      const token = prompt('Enter your GitHub Personal Access Token (make sure Contents permission is set to Read and write):', state.ghToken);
+      if (token !== null) {
+        state.ghToken = token.trim();
+        localStorage.setItem('af_gh_token', state.ghToken);
+        alert('New token saved successfully!');
+        syncWithGitHub();
+      }
     }
 
     async function syncWithGitHub(forcePull = false) {
       if (!state.ghToken) {
-        const token = prompt('Enter your GitHub Personal Access Token (classic token with repo scope or fine-grained token with Contents read/write):');
-        if (!token) return;
-        state.ghToken = token.trim();
-        localStorage.setItem('af_gh_token', state.ghToken);
+        resetToken();
+        if (!state.ghToken) return;
       }
 
       state.isSyncing = true;
@@ -200,9 +201,7 @@
         const getRes = await fetch(url, { headers });
         
         if (getRes.status === 401 || getRes.status === 403) {
-          localStorage.removeItem('af_gh_token');
-          state.ghToken = '';
-          throw new Error('Authentication or Permission denied (401/403). Your token may be invalid, expired, or lacking repository scope permissions.');
+          throw new Error('Authentication or Permission denied (401/403). Please verify your token has Contents: Read and write permissions.');
         }
 
         if (getRes.ok) {
@@ -241,10 +240,6 @@
           alert('Sync Successful! Cloud backup updated.');
         } else {
           const errData = await putRes.json().catch(() => ({}));
-          if (putRes.status === 403 || putRes.status === 401) {
-            localStorage.removeItem('af_gh_token');
-            state.ghToken = '';
-          }
           throw new Error(errData.message || `GitHub returned status ${putRes.status}`);
         }
       } catch (err) {
@@ -266,7 +261,7 @@
       const allChildrenSelected = items.length > 0 && items.every(item => state.selectedIds.includes(item.id));
 
       app.innerHTML = `
-        <!-- Header Controls in One Single Row on Top -->
+        <!-- Header Controls in One Single Row on Top (Optimized for iPad & Phone viewports) -->
         <header class="shrink-0 z-30 bg-black/95 backdrop-blur-lg border-b border-zinc-900 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
           
           <!-- Left group: Sync, Key, Home, Add Item -->
@@ -275,7 +270,7 @@
               <i data-lucide="${state.isSyncing ? 'refresh-cw' : 'cloud'}" class="w-3.5 h-3.5 ${state.isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-400'}"></i>
               <span class="hidden sm:inline">${state.isSyncing ? 'Syncing...' : 'Sync'}</span>
             </button>
-            <button onclick="resetToken()" title="Reset saved GitHub token" class="p-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-zinc-400 hover:text-zinc-200">
+            <button onclick="resetToken()" title="Update GitHub token" class="p-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-zinc-400 hover:text-zinc-200">
               <i data-lucide="key" class="w-3.5 h-3.5"></i>
             </button>
 
@@ -456,7 +451,7 @@
       }
     }
 
-    // --- CONTEXT MENU OPTIONS ---
+    // --- CONTEXT MENU OPTIONS (Preserving all required options) ---
     function renderContextMenu(item, isFolderItem) {
       return `
         <div onclick="event.stopPropagation()" class="absolute left-full top-0 ml-2 w-48 bg-zinc-900/95 border border-zinc-700/80 rounded-xl shadow-2xl backdrop-blur-md z-50 overflow-hidden text-xs py-1">
@@ -479,14 +474,14 @@
             <i data-lucide="edit-3" class="w-3.5 h-3.5 text-zinc-400"></i> Rename
           </button>
           <button onclick="moveToFolder('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-            <i data-lucide="folder-output" class="w-3.5 h-3.5 text-zinc-400"></i> Move
+            <i data-lucide="folder-output" class="w-3.5 h-3.5 text-zinc-400"></i> Move to folder
           </button>
           <button onclick="snapToOriginalShape('${item.id}')" class="w-full px-3 py-2 text-left hover:bg-zinc-800 flex items-center gap-2 text-zinc-200">
-            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400"></i> Resize Original
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400"></i> Snap to original shape
           </button>
           <div class="h-px bg-zinc-800 my-1"></div>
           <button onclick="deleteItemConfirm('${item.id}', ${isFolderItem})" class="w-full px-3 py-2 text-left hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium">
-            <i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400"></i> Delete
+            <i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-400"></i> Delete with confirmation
           </button>
         </div>
       `;
@@ -662,7 +657,7 @@
 
     // --- BULK OPERATIONS ---
     async function bulkDelete() {
-      if (!confirm(`Delete ${state.selectedIds.length} items?`)) return;
+      if (!confirm(`Are you sure you want to delete ${state.selectedIds.length} items?`)) return;
       for (let id of state.selectedIds) {
         state.folders = state.folders.filter(f => f.id !== id);
         state.files = state.files.filter(f => f.id !== id);
