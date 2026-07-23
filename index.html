@@ -170,7 +170,7 @@
 
     // --- TOKEN & GITHUB SYNC ---
     function resetToken() {
-      const token = prompt('Enter your GitHub Personal Access Token (make sure Contents permission is set to Read and write):', state.ghToken);
+      const token = prompt('Enter your GitHub Personal Access Token:', state.ghToken);
       if (token !== null) {
         state.ghToken = token.trim();
         localStorage.setItem('af_gh_token', state.ghToken);
@@ -190,9 +190,8 @@
 
       try {
         const url = `https://api.github.com/repos/${CONFIG.ghRepo}/contents/${CONFIG.ghPath}`;
-        const authHeader = state.ghToken.startsWith('ghp_') || state.ghToken.startsWith('gho_') 
-          ? `token ${state.ghToken}` 
-          : `Bearer ${state.ghToken}`;
+        let cleanToken = state.ghToken.replace(/^(token|Bearer)\s+/i, '').trim();
+        const authHeader = `token ${cleanToken}`;
 
         const headers = {
           'Authorization': authHeader,
@@ -204,7 +203,7 @@
         const getRes = await fetch(url, { headers });
         
         if (getRes.status === 401 || getRes.status === 403) {
-          throw new Error('Authentication failed or Insufficient permissions (401/403). Ensure token has Contents: Read and write.');
+          throw new Error(`GitHub Authentication failed (${getRes.status}). Please verify your token has 'repo' or 'contents:write' permissions.`);
         }
 
         if (getRes.ok) {
@@ -233,10 +232,6 @@
 
         const jsonString = JSON.stringify({ folders: state.folders, files: state.files });
         
-        if (jsonString.length > 95 * 1024 * 1024) {
-          throw new Error('Data payload exceeds GitHub API absolute limit (~100MB). Please offload or delete some large media files.');
-        }
-
         const payload = {
           message: 'Sync Aiden Files Data',
           content: btoa(unescape(encodeURIComponent(jsonString))),
@@ -276,6 +271,15 @@
       app.innerHTML = `
         <header class="shrink-0 z-35 bg-black/95 backdrop-blur-lg border-b border-zinc-900 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
           <div class="flex items-center gap-1.5 shrink-0">
+            <button onclick="navigateTo(null)" class="px-3 py-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shrink-0">
+              <i data-lucide="home" class="w-4 h-4 text-amber-400"></i> Home
+            </button>
+            <button onclick="openNewFolderModal()" class="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-zinc-700/60 shadow-sm cursor-pointer shrink-0">
+              <i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i> New Folder
+            </button>
+            <button onclick="openUploadModal()" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer shrink-0">
+              <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i> Add Item
+            </button>
             <button onclick="syncWithGitHub()" class="px-2.5 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-bold text-zinc-300 flex items-center gap-1.5 shadow-sm shrink-0">
               <i data-lucide="${state.isSyncing ? 'refresh-cw' : 'cloud'}" class="w-3.5 h-3.5 ${state.isSyncing ? 'animate-spin text-amber-400' : 'text-zinc-400'}"></i>
               <span>${state.isSyncing ? 'Syncing...' : 'Sync'}</span>
@@ -286,15 +290,6 @@
             <button onclick="forcePullCloudData()" title="Force Pull from Cloud" class="px-2.5 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-bold text-amber-400 flex items-center gap-1.5 shadow-sm shrink-0">
               <i data-lucide="download-cloud" class="w-3.5 h-3.5"></i>
               <span>Pull Cloud</span>
-            </button>
-            <button onclick="navigateTo(null)" class="px-3 py-2 bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shrink-0">
-              <i data-lucide="home" class="w-4 h-4 text-amber-400"></i> Home
-            </button>
-            <button onclick="openNewFolderModal()" class="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-zinc-700/60 shadow-sm cursor-pointer shrink-0">
-              <i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i> New Folder
-            </button>
-            <button onclick="openUploadModal()" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer shrink-0">
-              <i data-lucide="plus" class="w-4 h-4 stroke-[3]"></i> Add Item
             </button>
           </div>
 
@@ -367,7 +362,7 @@
       const posX = item.x !== undefined ? item.x : (20 + col * 140);
       const posY = item.y !== undefined ? item.y : (20 + row * 160);
       const itemWidth = item.width || (isFolder(item) ? 96 : 112);
-      const itemHeight = item.height || (isFolder(item) ? 96 : 128);
+      const itemHeight = item.height || (isFolder(item) ? 96 : 144); // Increased height allocation for filenames
       const folder = isFolder(item);
       const isMenuOpen = state.activeMenuId === item.id;
       const isSelected = state.selectedIds.includes(item.id);
@@ -375,7 +370,7 @@
       if (folder) {
         return `
           <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute flex flex-col items-center cursor-pointer touch-none" onclick="handleItemClick(event, '${item.id}', true)">
-            <div class="folder-cube bg-gradient-to-b from-zinc-800 to-zinc-950 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-zinc-700/60'} flex flex-col items-center justify-center relative overflow-hidden group">
+            <div class="folder-cube w-[96px] h-[96px] shrink-0 bg-gradient-to-b from-zinc-800 to-zinc-950 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-zinc-700/60'} flex flex-col items-center justify-center relative overflow-hidden group">
               ${item.coverUrl ? `<img src="${item.coverUrl}" class="w-full h-full object-cover rounded-[20px] pointer-events-none" />` : `<i data-lucide="folder" class="w-10 h-10 text-amber-400 fill-amber-400/20 stroke-[1.5] pointer-events-none"></i>`}
               ${state.selectMode ? `<div class="absolute top-2 left-2 w-5 h-5 rounded-md border border-zinc-400 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'bg-black/60'} pointer-events-none">${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5 text-white"></i>' : ''}</div>` : ''}
               <button type="button" onclick="toggleMenu(event, '${item.id}')" class="absolute top-1.5 right-1.5 p-2 bg-black/70 hover:bg-black rounded-full text-zinc-200 z-45 cursor-pointer shadow-md"><i data-lucide="more-vertical" class="w-4 h-4 pointer-events-none"></i></button>
@@ -393,8 +388,8 @@
 
         return `
           <div id="item-${item.id}" data-id="${item.id}" style="left: ${posX}px; top: ${posY}px; width: ${itemWidth}px; height: ${itemHeight}px;" class="absolute flex flex-col items-center cursor-pointer touch-none" onclick="handleItemClick(event, '${item.id}', false)">
-            <div class="w-full flex-1 bg-zinc-900 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : (state.editMode ? 'border-yellow-500/60' : 'border-zinc-800')} rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg relative">
-              <div class="flex-1 bg-zinc-950 relative overflow-hidden flex items-center justify-center rounded-t-2xl">
+            <div class="w-[112px] h-[112px] shrink-0 bg-zinc-900 border ${isSelected ? 'border-indigo-500 ring-2 ring-indigo-500/50' : (state.editMode ? 'border-yellow-500/60' : 'border-zinc-800')} rounded-2xl overflow-hidden flex flex-col justify-between shadow-lg relative">
+              <div class="w-full h-full bg-zinc-950 relative overflow-hidden flex items-center justify-center rounded-2xl">
                 ${isImage && imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover rounded-xl pointer-events-none" alt="${item.name}" />` : `
                   <div class="flex flex-col items-center gap-1 text-zinc-400">
                     <i data-lucide="${icon}" class="w-8 h-8 text-amber-400 pointer-events-none"></i>
@@ -710,7 +705,7 @@
       const item = state.folders.find(f => f.id === id) || state.files.find(f => f.id === id);
       if (item) {
         item.width = isFolder(item) ? 96 : 112;
-        item.height = isFolder(item) ? 96 : 128;
+        item.height = isFolder(item) ? 96 : 144;
         if (isFolder(item)) await saveFolder(item); else await saveFile(item);
         closeMenu(); render();
       }
@@ -786,7 +781,7 @@
           textContent: textContent,
           parentId: state.currentFolderId,
           width: 112,
-          height: 128
+          height: 144
         };
 
         state.files.push(item);
